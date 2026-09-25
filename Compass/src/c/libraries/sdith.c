@@ -106,8 +106,8 @@ static const DitherPattern DITHER_PATTERN_9 = {
         0, 1, 0, 1,
         1, 0, 1, 0
     },
-    .width = 2,
-    .height = 2
+    .width = 4,
+    .height = 4
 };
 
 static const DitherPattern DITHER_PATTERN_10 = {
@@ -117,8 +117,8 @@ static const DitherPattern DITHER_PATTERN_10 = {
         0, 1, 0, 1,
         1, 1, 1, 0
     },
-    .width = 2,
-    .height = 2
+    .width = 4,
+    .height = 4
 };
 
 static const DitherPattern DITHER_PATTERN_11 = {
@@ -128,8 +128,8 @@ static const DitherPattern DITHER_PATTERN_11 = {
         0, 1, 0, 1,
         1, 1, 1, 0
     },
-    .width = 2,
-    .height = 2
+    .width = 4,
+    .height = 4
 };
 
 static const DitherPattern DITHER_PATTERN_12 = {
@@ -204,6 +204,16 @@ static const DitherPattern Patterns[] = { // should match the enum order
     DITHER_PATTERN_16, // filled
 };
 
+DitherTemplate sdith_color_to_dither_template(GColor color)
+{
+    DitherTemplate color_template = {
+        .dither_type = DITHER_FILLED,
+        .light_color = color,
+        .dark_color = color
+    };
+    return color_template;
+}
+
 void sdith_set_dither_type(DitherType dither_type)
 {
     _dither_type = dither_type;
@@ -215,26 +225,49 @@ void sdith_set_fill_colors(GColor light_color, GColor dark_color)
     _dark_color = dark_color;
 }
 
+void sdith_set_dither_template(DitherTemplate dither_template)
+{
+    sdith_set_dither_type(dither_template.dither_type);
+    sdith_set_fill_colors(dither_template.light_color, dither_template.dark_color);
+}
+
+
 void sdith_draw_pixel(GContext * ctx, GPoint point)
 {
-    DitherPattern pattern = Patterns[_dither_type];
-    int16_t modx = point.x % pattern.width;
-    int16_t mody = point.y % pattern.height;
-    //APP_LOG(APP_LOG_LEVEL_DEBUG, "modx: %d mody: %d", (int)modx, (int)mody);
-    GColor color = pattern.pattern[mody * pattern.width + modx] == 1 ? _light_color : _dark_color;
+    GColor color;
+    if (_dark_color.argb == _light_color.argb) // shortcut for just using regular fill
+    {
+        color = _dark_color;
+    }
+    else
+    {
+        DitherPattern pattern = Patterns[_dither_type];
+        int16_t modx = point.x % pattern.width;
+        int16_t mody = point.y % pattern.height;
+        //APP_LOG(APP_LOG_LEVEL_DEBUG, "modx: %d mody: %d", (int)modx, (int)mody);
+        color = pattern.pattern[mody * pattern.width + modx] == 1 ? _dark_color : _light_color;
+    }
+
     graphics_context_set_stroke_color(ctx, color);
     graphics_draw_pixel(ctx, point);
 }
 
 void sdith_fill_rect(GContext * ctx, GRect rect)
 {
-    for (int16_t h = 0; h < rect.size.h; h++)
+    if (_dark_color.argb == _light_color.argb) // shortcut for just using regular fill
     {
-        for (int16_t w = 0; w < rect.size.w; w++) 
+        GColor color = _dark_color;
+        graphics_context_set_fill_color(ctx, color);
+        graphics_fill_rect(ctx, rect, 0, GCornerNone);
+    }
+    else   
+    {
+        for (int16_t h = 0; h < rect.size.h; h++)
         {
-            sdith_draw_pixel(ctx, GPoint(rect.origin.x + w, rect.origin.y + h));
+            for (int16_t w = 0; w < rect.size.w; w++) 
+            {
+                sdith_draw_pixel(ctx, GPoint(rect.origin.x + w, rect.origin.y + h));
+            }
         }
     }
 }
-
-

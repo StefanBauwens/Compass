@@ -2,6 +2,7 @@
 #define COMPASS_HEIGHT 12
 
 #include <pebble.h>
+#include "libraries/sdith.h"
 
 static Window *s_window;
 static TextLayer *s_text_layer;
@@ -23,15 +24,29 @@ static const uint8_t s_compass[] = {
   0,0,0,0,6,6,6,6,6,6,0,0,0,0
 };
 
-static const GColor s_colors[] = {
-  GColorClear,      // = 0
-  GColorWhite,      // = 1
-  GColorLightGray,  // = 2
-  GColorDarkGray,   // = 3
-  GColorOxfordBlue, // = 4
-  GColorOxfordBlue, // = 5
-  GColorBlack,      // = 6
+#if defined(PBL_COLOR)
+static const DitherTemplate s_color_palette[] = {
+  COLOR_TEMPLATE(GColorClear),                              // = 0
+  DITHER_TEMPLATE(DITHER_8, GColorWhite, GColorLightGray),  // = 1
+  COLOR_TEMPLATE(GColorLightGray),                          // = 2
+  COLOR_TEMPLATE(GColorDarkGray),                           // = 3
+  DITHER_TEMPLATE(DITHER_13, GColorDarkGray, GColorBlack),  // = 4
+  DITHER_TEMPLATE(DITHER_14, GColorDarkGray, GColorBlack),  // = 5
+  COLOR_TEMPLATE(GColorBlack),                              // = 6
+  COLOR_TEMPLATE(GColorRed)                                 // = 7
 };
+#else // BLACK AND WHITE MODELS
+static const DitherTemplate s_color_palette[] = {
+  COLOR_TEMPLATE(GColorClear),                              // = 0
+  DITHER_TEMPLATE(DITHER_1, GColorWhite, GColorBlack),      // = 1
+  DITHER_TEMPLATE(DITHER_6, GColorWhite, GColorBlack),      // = 2
+  DITHER_TEMPLATE(DITHER_8, GColorWhite, GColorBlack),      // = 3
+  DITHER_TEMPLATE(DITHER_14, GColorWhite, GColorBlack),     // = 4
+  DITHER_TEMPLATE(DITHER_15, GColorWhite, GColorBlack),     // = 5
+  COLOR_TEMPLATE(GColorBlack),                              // = 6
+  DITHER_TEMPLATE(DITHER_4, GColorWhite, GColorBlack),      // = 7
+};
+#endif
 
 static const uint8_t s_pixel_thickness = 10;
 
@@ -44,11 +59,11 @@ static void compass_update_proc(Layer *layer, GContext *ctx) {
     for (size_t w = 0; w < COMPASS_WIDTH; w++)
     {
       uint8_t color_nr = s_compass[(h * COMPASS_WIDTH) + w];
-      GColor color = s_colors[color_nr];
+      DitherTemplate color = s_color_palette[color_nr];
       if (color_nr != 0)
       {
-        graphics_context_set_fill_color(ctx, color);
-        graphics_fill_rect(ctx, GRect(w * s_pixel_thickness, h * s_pixel_thickness, s_pixel_thickness, s_pixel_thickness), 0, GCornerNone);
+        sdith_set_dither_template(color);
+        sdith_fill_rect(ctx, GRect(w * s_pixel_thickness, h * s_pixel_thickness, s_pixel_thickness, s_pixel_thickness));
       }
     }
   }
@@ -67,12 +82,14 @@ static void needle_update_proc(Layer *layer, GContext *ctx) {
   float ry = (float)cos_lookup(angle) / 65536.0f;
 
   // draw the smaller horizontal spurs of the needle
-  graphics_context_set_fill_color(ctx, GColorDarkGray);
+  sdith_set_dither_template(s_color_palette[3]);
+  //graphics_context_set_fill_color(ctx, GColorDarkGray);
   for (int8_t i = -4; i <= 4; i++)
   {
     int8_t x = NX + ry * i * SCALE_X;
     int8_t y = NY - rx * i * SCALE_Y;
-    graphics_fill_rect(ctx, GRect(x * s_pixel_thickness, y * s_pixel_thickness, s_pixel_thickness, s_pixel_thickness), 0, GCornerNone);
+    sdith_fill_rect(ctx, GRect(x * s_pixel_thickness, y * s_pixel_thickness, s_pixel_thickness, s_pixel_thickness));
+    //graphics_fill_rect(ctx, GRect(x * s_pixel_thickness, y * s_pixel_thickness, s_pixel_thickness, s_pixel_thickness), 0, GCornerNone);
   }
 
   // draw the main part needle
@@ -82,12 +99,15 @@ static void needle_update_proc(Layer *layer, GContext *ctx) {
     int8_t y = NY + ry * i * SCALE_Y;
     if (i >= 0) {
       // main red pointer
-      graphics_context_set_fill_color(ctx, /*GColorRed*/GColorWhite);
+      sdith_set_dither_template(s_color_palette[7]);
+      //graphics_context_set_fill_color(ctx, GColorRed);
     } else {
       // grey back half
-      graphics_context_set_fill_color(ctx, GColorDarkGray);
+      sdith_set_dither_template(s_color_palette[3]);
+      //graphics_context_set_fill_color(ctx, GColorDarkGray);
     }
-    graphics_fill_rect(ctx, GRect(x * s_pixel_thickness, y * s_pixel_thickness, s_pixel_thickness, s_pixel_thickness), 0, GCornerNone);
+    sdith_fill_rect(ctx, GRect(x * s_pixel_thickness, y * s_pixel_thickness, s_pixel_thickness, s_pixel_thickness));
+    //graphics_fill_rect(ctx, GRect(x * s_pixel_thickness, y * s_pixel_thickness, s_pixel_thickness, s_pixel_thickness), 0, GCornerNone);
   }
 }
 

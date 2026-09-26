@@ -1,5 +1,6 @@
 #define COMPASS_WIDTH 14
 #define COMPASS_HEIGHT 12
+#define STEP_DELAY 50 //ms
 
 #include <pebble.h>
 #include "libraries/sdith.h"
@@ -8,6 +9,9 @@ static Window *s_window;
 static TextLayer *s_text_layer;
 static Layer *s_compass_layer;
 static Layer *s_needle_layer;
+
+//ticks
+static AppTimer *milli_tick_handler;
 
 static const uint8_t s_compass[] = {
   0,0,0,0,4,4,4,4,4,4,0,0,0,0,
@@ -48,6 +52,8 @@ static const DitherTemplate s_color_palette[] = {
 };
 #endif
 
+static const int16_t s_clamp_angles[] = { 0, 11, 21, 36, 43, 54, 66, 90, 113, 126, 137, 143, 158, 169, 180, 191, 201, 216, 223, 234, 246, 270, 293, 306, 317, 324, 338, 349, 360 };  // angles for the compass to clamp to that corresponds to the 28 pre-rendered sprite of Minecraft Compass.
+
 static const uint8_t s_pixel_thickness = 10;
 
 static int32_t s_angle = 90;
@@ -71,7 +77,32 @@ static void compass_update_proc(Layer *layer, GContext *ctx) {
 
 static void needle_update_proc(Layer *layer, GContext *ctx) { 
   // based on: https://minecraft.wiki/w/Procedural_animated_texture_generation/Compasses
-  int32_t angle = DEG_TO_TRIGANGLE(s_angle);
+
+  // first map the angle to 0-360 correctly
+  int32_t clean_angle = ((s_angle % 360) + 360) % 360;
+
+  // clamp angle using the 28 values.
+  int32_t clamped_angle = clean_angle;
+  size_t array_length = ARRAY_LENGTH(s_clamp_angles);
+  for (size_t i = 0; i < array_length; i++)
+  {
+    if (clean_angle <= s_clamp_angles[i])
+    {
+      if (i == 0) { // if first item, clamp to it (== 0/360)
+        clamped_angle = s_clamp_angles[i];
+      } else { // i = 1 or more
+        // check if closer to this or previous value
+        if (s_clamp_angles[i] - clean_angle < clean_angle - s_clamp_angles[i-1]) {
+          clamped_angle = s_clamp_angles[i];
+        } else{
+          clamped_angle = s_clamp_angles[i-1];
+        }
+      }
+      break; // exit loop
+    }
+  }
+
+  int32_t angle = DEG_TO_TRIGANGLE(clamped_angle);
 
   const float NX = 7.5f; //8.5
   const float NY = 5.5f; //7.5
@@ -89,7 +120,6 @@ static void needle_update_proc(Layer *layer, GContext *ctx) {
     int8_t x = NX + ry * i * SCALE_X;
     int8_t y = NY - rx * i * SCALE_Y;
     sdith_fill_rect(ctx, GRect(x * s_pixel_thickness, y * s_pixel_thickness, s_pixel_thickness, s_pixel_thickness));
-    //graphics_fill_rect(ctx, GRect(x * s_pixel_thickness, y * s_pixel_thickness, s_pixel_thickness, s_pixel_thickness), 0, GCornerNone);
   }
 
   // draw the main part needle
@@ -100,15 +130,19 @@ static void needle_update_proc(Layer *layer, GContext *ctx) {
     if (i >= 0) {
       // main red pointer
       sdith_set_dither_template(s_color_palette[7]);
-      //graphics_context_set_fill_color(ctx, GColorRed);
     } else {
       // grey back half
       sdith_set_dither_template(s_color_palette[3]);
-      //graphics_context_set_fill_color(ctx, GColorDarkGray);
     }
     sdith_fill_rect(ctx, GRect(x * s_pixel_thickness, y * s_pixel_thickness, s_pixel_thickness, s_pixel_thickness));
-    //graphics_fill_rect(ctx, GRect(x * s_pixel_thickness, y * s_pixel_thickness, s_pixel_thickness, s_pixel_thickness), 0, GCornerNone);
   }
+}
+
+static void milli_tick() //runs once every ms.
+{
+  s_angle = (s_angle + 10) % 360;
+  layer_mark_dirty(s_needle_layer);
+  milli_tick_handler = app_timer_register(STEP_DELAY, milli_tick, NULL); // calls itself in STEP_DELAY ms
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -162,12 +196,18 @@ static void prv_window_load(Window *window) {
   s_needle_layer = layer_create(GRect(x0_compass, y0_compass, width_compass, height_compass));
   layer_set_update_proc(s_needle_layer, needle_update_proc);
   layer_add_child(window_layer, s_needle_layer);
+
+  // Sub to ticks
+  milli_tick_handler = app_timer_register(STEP_DELAY, milli_tick, NULL);
 }
 
 static void prv_window_unload(Window *window) {
   layer_destroy(s_compass_layer);
   layer_destroy(s_needle_layer);
   text_layer_destroy(s_text_layer);
+
+    // Unsubscribe to ticks
+  app_timer_cancel(milli_tick_handler);
 }
 
 static void prv_init(void) {

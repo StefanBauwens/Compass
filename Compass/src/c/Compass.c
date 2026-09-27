@@ -1,9 +1,15 @@
 #define COMPASS_WIDTH 14
 #define COMPASS_HEIGHT 12
-#define STEP_DELAY 50 //ms
+#define STEP_DELAY 150 //ms
+#define PIXEL_THICKNESS 10
 
 #include <pebble.h>
 #include "libraries/sdith.h"
+
+typedef struct {
+    DitherTemplate dither_template;
+    GRect rect;
+} DitherRect; // used for recording draw commands
 
 static Window *s_window;
 static TextLayer *s_text_layer;
@@ -54,9 +60,9 @@ static const DitherTemplate s_color_palette[] = {
 
 static const int16_t s_clamp_angles[] = { 0, 11, 21, 36, 43, 54, 66, 90, 113, 126, 137, 143, 158, 169, 180, 191, 201, 216, 223, 234, 246, 270, 293, 306, 317, 324, 338, 349, 360 };  // angles for the compass to clamp to that corresponds to the 28 pre-rendered sprite of Minecraft Compass.
 
-static const uint8_t s_pixel_thickness = 10;
-
 static int32_t s_angle = 90;
+
+static DitherRect s_recorded_draw_commands[34];
 
 static void compass_update_proc(Layer *layer, GContext *ctx) { 
   //draw pixels
@@ -69,57 +75,74 @@ static void compass_update_proc(Layer *layer, GContext *ctx) {
       if (color_nr != 0)
       {
         sdith_set_dither_template(color);
-        sdith_fill_rect(ctx, GRect(w * s_pixel_thickness, h * s_pixel_thickness, s_pixel_thickness, s_pixel_thickness));
+        sdith_fill_rect(ctx, GRect(w * PIXEL_THICKNESS, h * PIXEL_THICKNESS, PIXEL_THICKNESS, PIXEL_THICKNESS));
       }
     }
   }
 }
 
-static void needle_update_proc(Layer *layer, GContext *ctx) { 
-  // based on: https://minecraft.wiki/w/Procedural_animated_texture_generation/Compasses
+static int positive_modulo(int value, int mod)
+{
+  return ((value % mod) + mod) % mod;
+}
 
+static size_t get_clamped_angle_index(int32_t angle)
+{
   // first map the angle to 0-360 correctly
-  int32_t clean_angle = ((s_angle % 360) + 360) % 360;
+  int32_t clean_angle = positive_modulo(s_angle, 360);//((s_angle % 360) + 360) % 360;
 
   // clamp angle using the 28 values.
-  int32_t clamped_angle = clean_angle;
+  size_t index = 0;
   size_t array_length = ARRAY_LENGTH(s_clamp_angles);
   for (size_t i = 0; i < array_length; i++)
   {
     if (clean_angle <= s_clamp_angles[i])
     {
       if (i == 0) { // if first item, clamp to it (== 0/360)
-        clamped_angle = s_clamp_angles[i];
+        index = i;
+        //clamped_angle = s_clamp_angles[i];
       } else { // i = 1 or more
         // check if closer to this or previous value
         if (s_clamp_angles[i] - clean_angle < clean_angle - s_clamp_angles[i-1]) {
-          clamped_angle = s_clamp_angles[i];
+          index = i;
+          //clamped_angle = s_clamp_angles[i];
         } else{
-          clamped_angle = s_clamp_angles[i-1];
+          index = i - 1;
+          //clamped_angle = s_clamp_angles[i-1];
         }
       }
       break; // exit loop
     }
   }
 
-  int32_t angle = DEG_TO_TRIGANGLE(clamped_angle);
+  return index;
+}
 
+static void record_needle_draw_commands()
+{
+  // based on: https://minecraft.wiki/w/Procedural_animated_texture_generation/Compasses
   const float NX = 7.5f; //8.5
   const float NY = 5.5f; //7.5
   const float SCALE_X = 0.3f;
   const float SCALE_Y = SCALE_X * 0.5f;
 
+  int32_t angle = DEG_TO_TRIGANGLE(s_clamp_angles[get_clamped_angle_index(s_angle)]);
+  
   float rx = (float)sin_lookup(angle) / 65536.0f;
   float ry = (float)cos_lookup(angle) / 65536.0f;
 
+  size_t recording_index = 0;
+
   // draw the smaller horizontal spurs of the needle
-  sdith_set_dither_template(s_color_palette[3]);
-  //graphics_context_set_fill_color(ctx, GColorDarkGray);
   for (int8_t i = -4; i <= 4; i++)
   {
     int8_t x = NX + ry * i * SCALE_X;
     int8_t y = NY - rx * i * SCALE_Y;
-    sdith_fill_rect(ctx, GRect(x * s_pixel_thickness, y * s_pixel_thickness, s_pixel_thickness, s_pixel_thickness));
+    s_recorded_draw_commands[recording_index] = (DitherRect){
+      .dither_template = s_color_palette[3], 
+      .rect = GRect(x * PIXEL_THICKNESS, y * PIXEL_THICKNESS, PIXEL_THICKNESS, PIXEL_THICKNESS) 
+    };
+    recording_index++;
   }
 
   // draw the main part needle
@@ -127,22 +150,53 @@ static void needle_update_proc(Layer *layer, GContext *ctx) {
   {
     int8_t x = NX + rx * i * SCALE_X;
     int8_t y = NY + ry * i * SCALE_Y;
-    if (i >= 0) {
-      // main red pointer
-      sdith_set_dither_template(s_color_palette[7]);
-    } else {
-      // grey back half
-      sdith_set_dither_template(s_color_palette[3]);
-    }
-    sdith_fill_rect(ctx, GRect(x * s_pixel_thickness, y * s_pixel_thickness, s_pixel_thickness, s_pixel_thickness));
+    s_recorded_draw_commands[recording_index] = (DitherRect){ 
+      .dither_template = (i >= 0 ? s_color_palette[7] : s_color_palette[3]), 
+      .rect = GRect(x * PIXEL_THICKNESS, y * PIXEL_THICKNESS, PIXEL_THICKNESS, PIXEL_THICKNESS) 
+    };
+    recording_index++;
+  }
+}
+
+static void needle_update_proc(Layer *layer, GContext *ctx) 
+{ 
+  // run draw commands
+  for (size_t i = 0; i < ARRAY_LENGTH(s_recorded_draw_commands); i++)
+  {
+    sdith_set_dither_template(s_recorded_draw_commands[i].dither_template);
+    sdith_fill_rect(ctx, s_recorded_draw_commands[i].rect);
   }
 }
 
 static void milli_tick() //runs once every ms.
 {
-  s_angle = (s_angle + 10) % 360;
+  s_angle = positive_modulo(s_angle - 5, 360);
+  record_needle_draw_commands(); // do heavy lifting here so it doesn't happen in draw command
   layer_mark_dirty(s_needle_layer);
   milli_tick_handler = app_timer_register(STEP_DELAY, milli_tick, NULL); // calls itself in STEP_DELAY ms
+}
+
+static void compass_heading_handler(CompassHeadingData heading_data) {
+  // Is the compass calibrated?
+  switch(heading_data.compass_status) {
+    case CompassStatusDataInvalid:
+      text_layer_set_text(s_text_layer, "Not yet calibrated...");
+      break;
+    case CompassStatusUnavailable:
+      text_layer_set_text(s_text_layer, "No compass avaialble!");
+      break;
+    case CompassStatusCalibrating:
+      //text_layer_set_text(s_text_layer, "Calibrating...");
+      s_angle = TRIGANGLE_TO_DEG(TRIG_MAX_ANGLE - heading_data.magnetic_heading) + 180;
+      record_needle_draw_commands(); // do heavy lifting here so it doesn't happen in draw command
+      layer_mark_dirty(s_needle_layer);
+      break;
+    case CompassStatusCalibrated:
+      s_angle = TRIGANGLE_TO_DEG(TRIG_MAX_ANGLE - heading_data.magnetic_heading) + 180;
+      record_needle_draw_commands(); // do heavy lifting here so it doesn't happen in draw command
+      layer_mark_dirty(s_needle_layer);
+      break;
+  }
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -176,14 +230,14 @@ static void prv_window_load(Window *window) {
   GRect bounds = layer_get_bounds(window_layer);
 
   // calculate values for compass
-  uint8_t width_compass = (COMPASS_WIDTH * s_pixel_thickness);
-  uint8_t height_compass = (COMPASS_HEIGHT * s_pixel_thickness);
+  uint8_t width_compass = (COMPASS_WIDTH * PIXEL_THICKNESS);
+  uint8_t height_compass = (COMPASS_HEIGHT * PIXEL_THICKNESS);
   uint8_t x0_compass = (PBL_DISPLAY_WIDTH - width_compass) / 2;
   uint8_t y0_compass = (PBL_DISPLAY_HEIGHT - height_compass) / 2;
 
   // text layer
   s_text_layer = text_layer_create(GRect(0, y0_compass + height_compass + 5, bounds.size.w, 20));
-  text_layer_set_text(s_text_layer, "Press a button");
+  //text_layer_set_text(s_text_layer, "Press a button");
   text_layer_set_text_alignment(s_text_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_text_layer));
 
@@ -198,7 +252,12 @@ static void prv_window_load(Window *window) {
   layer_add_child(window_layer, s_needle_layer);
 
   // Sub to ticks
-  milli_tick_handler = app_timer_register(STEP_DELAY, milli_tick, NULL);
+  //milli_tick_handler = app_timer_register(STEP_DELAY, milli_tick, NULL);
+
+  // Subscribe to compass heading updates
+  compass_service_subscribe(compass_heading_handler); 
+  // Only notify when the heading has changed by more than 5 degrees.
+  compass_service_set_heading_filter(DEG_TO_TRIGANGLE(5));
 }
 
 static void prv_window_unload(Window *window) {
@@ -206,8 +265,11 @@ static void prv_window_unload(Window *window) {
   layer_destroy(s_needle_layer);
   text_layer_destroy(s_text_layer);
 
-    // Unsubscribe to ticks
+  // Unsubscribe to ticks
   app_timer_cancel(milli_tick_handler);
+
+  // unsub from compass
+  compass_service_unsubscribe();
 }
 
 static void prv_init(void) {

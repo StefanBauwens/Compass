@@ -5,6 +5,7 @@
 DitherType _dither_type = DITHER_FILLED;
 GColor _light_color = GColorWhite;
 GColor _dark_color = GColorBlack;
+GColor _pixel_color = GColorRichBrilliantLavender;
 
 /* DITHER PATTERNS START */
 static const DitherPattern DITHER_PATTERN_0 = {
@@ -231,6 +232,14 @@ void sdith_set_dither_template(DitherTemplate dither_template)
     sdith_set_fill_colors(dither_template.light_color, dither_template.dark_color);
 }
 
+void _set_pixel_color(GContext * ctx, GColor color)
+{
+    if (_pixel_color.argb != color.argb)
+    {
+        _pixel_color = color;
+         graphics_context_set_stroke_color(ctx, color);
+    }
+}
 
 void sdith_draw_pixel(GContext * ctx, GPoint point)
 {
@@ -248,7 +257,17 @@ void sdith_draw_pixel(GContext * ctx, GPoint point)
         color = pattern.pattern[mody * pattern.width + modx] == 1 ? _dark_color : _light_color;
     }
 
-    graphics_context_set_stroke_color(ctx, color);
+    _set_pixel_color(ctx, color);
+    graphics_draw_pixel(ctx, point);
+}
+
+void _optimzed_draw_pixel(GContext * ctx, GPoint point, DitherPattern pattern)
+{
+    int16_t modx = point.x % pattern.width;
+    int16_t mody = point.y % pattern.height;
+    GColor color = pattern.pattern[mody * pattern.width + modx] == 1 ? _dark_color : _light_color;
+
+    _set_pixel_color(ctx, color);
     graphics_draw_pixel(ctx, point);
 }
 
@@ -262,11 +281,13 @@ void sdith_fill_rect(GContext * ctx, GRect rect)
     }
     else   
     {
+        DitherPattern pattern = Patterns[_dither_type];
         for (int16_t h = 0; h < rect.size.h; h++)
         {
             for (int16_t w = 0; w < rect.size.w; w++) 
             {
-                sdith_draw_pixel(ctx, GPoint(rect.origin.x + w, rect.origin.y + h));
+                _optimzed_draw_pixel(ctx, GPoint(rect.origin.x + w, rect.origin.y + h), pattern);
+                //sdith_draw_pixel(ctx, GPoint(rect.origin.x + w, rect.origin.y + h));
             }
         }
     }

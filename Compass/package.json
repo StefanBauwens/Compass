@@ -14,7 +14,6 @@
       "aplite",
       "basalt",
       "chalk",
-      "diorite",
       "emery",
       "flint",
       "gabbro"
@@ -26,7 +25,14 @@
       "dummy"
     ],
     "resources": {
-      "media": []
+      "media": [
+        {
+            "menuIcon": true,
+            "type": "bitmap",
+            "name": "APP_ICON",
+            "file": "images/app_icon.png"
+        }
+      ]
     }
   }
 }

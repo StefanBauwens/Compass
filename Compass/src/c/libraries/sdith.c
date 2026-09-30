@@ -234,7 +234,7 @@ void sdith_set_dither_template(DitherTemplate dither_template)
 
 void _set_pixel_color(GContext * ctx, GColor color)
 {
-    if (_pixel_color.argb != color.argb)
+    if (!gcolor_equal(_pixel_color, color))
     {
         _pixel_color = color;
          graphics_context_set_stroke_color(ctx, color);
@@ -244,7 +244,7 @@ void _set_pixel_color(GContext * ctx, GColor color)
 void sdith_draw_pixel(GContext * ctx, GPoint point)
 {
     GColor color;
-    if (_dark_color.argb == _light_color.argb) // shortcut for just using regular fill
+    if (gcolor_equal(_dark_color, _light_color)) // shortcut for just using regular fill
     {
         color = _dark_color;
     }
@@ -258,7 +258,10 @@ void sdith_draw_pixel(GContext * ctx, GPoint point)
     }
 
     _set_pixel_color(ctx, color);
-    graphics_draw_pixel(ctx, point);
+    if (!gcolor_equal(color, GColorClear))
+    {
+        graphics_draw_pixel(ctx, point);
+    }
 }
 
 void _optimzed_draw_pixel(GContext * ctx, GPoint point, DitherPattern pattern)
@@ -268,12 +271,15 @@ void _optimzed_draw_pixel(GContext * ctx, GPoint point, DitherPattern pattern)
     GColor color = pattern.pattern[mody * pattern.width + modx] == 1 ? _dark_color : _light_color;
 
     _set_pixel_color(ctx, color);
-    graphics_draw_pixel(ctx, point);
+    if (!gcolor_equal(color, GColorClear))
+    {
+        graphics_draw_pixel(ctx, point);
+    }
 }
 
 void sdith_fill_rect(GContext * ctx, GRect rect)
 {
-    if (_dark_color.argb == _light_color.argb) // shortcut for just using regular fill
+    if (gcolor_equal(_dark_color, _light_color)) // shortcut for just using regular fill
     {
         GColor color = _dark_color;
         graphics_context_set_fill_color(ctx, color);

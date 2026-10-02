@@ -21,15 +21,15 @@ static const GRect s_window_frame = GRect(MINI_WINDOW_X, MINI_WINDOW_Y, MINI_WIN
 static const GRect s_title_frame = GRect(MINI_WINDOW_TITLE_X, MINI_WINDOW_TITLE_Y, MINI_WINDOW_TITLE_WIDTH, MINI_WINDOW_TITLE_HEIGHT);
 static const GRect s_body_frame = GRect(MINI_WINDOW_X + 3, MINI_WINDOW_Y + 22, MINI_WINDOW_WIDTH - 6 , MINI_WINDOW_HEIGHT - 25); //TODO test
 
-static const DitherTemplate bg_dith = DITHER_TEMPLATE(DITHER_8, GColorClear, GColorWhite);
+static const DitherTemplate bg_dith = DITHER_TEMPLATE(DITHER_8, GColorWhite, GColorClear);
 
 void main_layer_update_proc(Layer *layer, GContext *ctx) { 
     graphics_context_set_fill_color(ctx, GColorBlack);
-    //graphics_fill_rect(ctx, GRect(0, 0, s_window_frame.size.w, s_window_frame.size.h), 4, GCornersAll);
-    graphics_fill_rect(ctx, GRect(0, 0, s_window_frame.size.w, MINI_WINDOW_TITLE_HEIGHT), 4, GCornersTop); //TODO temp
+    graphics_fill_rect(ctx, GRect(0, 0, s_window_frame.size.w, s_window_frame.size.h), 4, GCornersAll);
+    //graphics_fill_rect(ctx, GRect(0, 0, s_window_frame.size.w, MINI_WINDOW_TITLE_HEIGHT), 4, GCornersTop); //TODO temp
 
     sdith_set_dither_template(bg_dith);
-    sdith_fill_rect(ctx, GRect(2, 2 + MINI_WINDOW_TITLE_HEIGHT, s_window_frame.size.w-4, s_window_frame.size.h-4- MINI_WINDOW_TITLE_HEIGHT));
+    sdith_fill_rect(ctx, GRect(2, 2 + MINI_WINDOW_TITLE_HEIGHT, s_window_frame.size.w-4, s_window_frame.size.h-4- MINI_WINDOW_TITLE_HEIGHT), 2, GCornersBottom);
 
     //TODO temp commented
     //graphics_context_set_fill_color(ctx, GColorWhite);
@@ -51,7 +51,7 @@ void create_mini_window(Layer * window_layer, const char * title, const char * b
 
     // title layer
     s_title_layer = text_layer_create(s_title_frame);
-    text_layer_set_background_color(s_title_layer, GColorBlack);
+    text_layer_set_background_color(s_title_layer, GColorClear);
     text_layer_set_text_color(s_title_layer, GColorWhite);
     text_layer_set_text(s_title_layer, title);
     text_layer_set_text_alignment(s_title_layer, GTextAlignmentLeft);

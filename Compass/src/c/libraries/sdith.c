@@ -2,10 +2,25 @@
 // Small Dithering Library
 #include "sdith.h"
 
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#define CLAMP(x, min, max) (MAX(min, MIN(x, max)))
+
 DitherType _dither_type = DITHER_FILLED;
 GColor _light_color = GColorWhite;
 GColor _dark_color = GColorBlack;
 GColor _pixel_color = GColorRichBrilliantLavender;
+
+/* CORNERS START */
+// Taken from graphics.c from PebbleOS, logic is looseley inspired on the code from graphics.c
+static const uint32_t round_top_corner_lookup[] = {
+    0x0, 0x01, 0x01, 0x12, 0x113, 0x123, 0x1234, 0x11235, 0x112346,
+};
+static const uint32_t round_bottom_corner_lookup[] = {
+    0x0, 0x01, 0x10, 0x210, 0x3110, 0x32100, 0x432100, 0x5321100, 0x64321100,
+};
+
+/* CORNERS END */
 
 /* DITHER PATTERNS START */
 static const DitherPattern DITHER_PATTERN_0 = {
@@ -234,11 +249,11 @@ void sdith_set_dither_template(DitherTemplate dither_template)
 
 void _set_pixel_color(GContext * ctx, GColor color)
 {
-    if (!gcolor_equal(_pixel_color, color))
-    {
+    //if (!gcolor_equal(_pixel_color, color))
+    //{
         _pixel_color = color;
-         graphics_context_set_stroke_color(ctx, color);
-    }
+        graphics_context_set_stroke_color(ctx, color);
+    //}
 }
 
 void sdith_draw_pixel(GContext * ctx, GPoint point)
@@ -277,24 +292,145 @@ void _optimzed_draw_pixel(GContext * ctx, GPoint point, DitherPattern pattern)
     }
 }
 
-void sdith_fill_rect(GContext * ctx, GRect rect)
+void _draw_horizontal_line(GContext * ctx, GPoint point, int16_t length, DitherPattern pattern)
+{
+    for (int16_t i = 0; i < length; i++)
+    {
+        _optimzed_draw_pixel(ctx, GPoint(point.x + i, point.y), pattern);
+    }
+}
+
+void _draw_corner(GContext * ctx, GPoint point, int8_t radius, bool is_left_corner, uint32_t corner_insets, DitherPattern pattern) // radius MUST be between 0 and 8
+{
+    // not doing any clamping of radius since this is an internal function so *should* be safe
+
+    int8_t row_inset = 0;
+    int8_t length = 0;
+    for (int8_t row = 0; row < radius; row++)
+    {
+        row_inset = (corner_insets >> (4 * row)) & 0xF; // reading from most right to left
+        length = 8 - row_inset;
+        if (is_left_corner)
+        {
+            _draw_horizontal_line(ctx, GPoint(point.x + row_inset, point.y + row), length, pattern);
+        }
+        else // right corner
+        {
+            _draw_horizontal_line(ctx, GPoint(point.x, point.y + row), length, pattern);
+        }
+    }
+}
+
+void _fill_rect(GContext * ctx, GRect rect, DitherPattern pattern)
+{
+    for (int16_t h = 0; h < rect.size.h; h++)
+    {
+        for (int16_t w = 0; w < rect.size.w; w++) 
+        {
+            _optimzed_draw_pixel(ctx, GPoint(rect.origin.x + w, rect.origin.y + h), pattern);
+        }
+    }
+}
+
+void sdith_fill_rect(GContext * ctx, GRect rect, uint16_t corner_radius, GCornerMask corner_mask)
 {
     if (gcolor_equal(_dark_color, _light_color)) // shortcut for just using regular fill
     {
         GColor color = _dark_color;
         graphics_context_set_fill_color(ctx, color);
-        graphics_fill_rect(ctx, rect, 0, GCornerNone);
+        graphics_fill_rect(ctx, rect, corner_radius, corner_mask);
     }
     else   
     {
         DitherPattern pattern = Patterns[_dither_type];
-        for (int16_t h = 0; h < rect.size.h; h++)
+
+        if (corner_mask == GCornerNone || corner_radius == 0)
         {
-            for (int16_t w = 0; w < rect.size.w; w++) 
+            _fill_rect(ctx, rect, pattern);
+            return;
+        }
+
+        // clamp corner_radius to 8 or to smallest width/height of rect
+        corner_radius = CLAMP(corner_mask, 0, MIN(MIN(8, rect.size.h), rect.size.w));
+
+        //  use simple rect fill if corner radius ended up being 0 after clamp
+        if (corner_radius == 0)
+        {
+            _fill_rect(ctx, rect, pattern);
+            return;
+        }
+
+        // using corners
+        bool has_top_left_corner = corner_mask & GCornerTopLeft;
+        bool has_top_right_corner = corner_mask & GCornerTopRight;
+        bool has_bottom_left_corner = corner_mask & GCornerBottomLeft;
+        bool has_bottom_right_corner = corner_mask & GCornerBottomRight;
+
+        uint32_t corner_insets;
+        GRect inner_rect;
+
+        if (has_top_left_corner || has_top_right_corner)
+        {
+            // Set up the insets for doing the top corners
+            corner_insets = round_top_corner_lookup[corner_radius];
+            
+            inner_rect = GRect(
+                (has_top_left_corner ? corner_radius : 0) + rect.origin.x, 
+                rect.origin.y, 
+                rect.size.w - (has_top_left_corner ? corner_radius : 0) - (has_top_right_corner ? corner_radius : 0),
+                corner_radius
+            );
+
+            //draw rect between top corners
+            _fill_rect(ctx, inner_rect, pattern);
+
+            if (has_top_left_corner)
             {
-                _optimzed_draw_pixel(ctx, GPoint(rect.origin.x + w, rect.origin.y + h), pattern);
-                //sdith_draw_pixel(ctx, GPoint(rect.origin.x + w, rect.origin.y + h));
+                //draw top left corner
+                _draw_corner(ctx, rect.origin, corner_radius, true, corner_insets, pattern);
+            }
+            if (has_top_right_corner)
+            {
+                //draw top right corner
+                _draw_corner(ctx, GPoint(inner_rect.origin.x + inner_rect.size.w, rect.origin.y), corner_radius, false, corner_insets, pattern);
+            }
+        }
+
+        // draw middle rect
+        GRect middle_rect = GRect(
+            rect.origin.x,
+            rect.origin.y + ((has_top_left_corner || has_top_right_corner) ? corner_radius : 0 ), 
+            rect.size.w, 
+            MAX(rect.size.h - ((has_top_left_corner || has_top_right_corner) ? corner_radius : 0 ) - ((has_bottom_left_corner || has_bottom_right_corner) ? corner_radius : 0), 0)
+        );
+        _fill_rect(ctx, middle_rect, pattern);
+
+        if (has_bottom_left_corner || has_bottom_right_corner)
+        {
+            // Set up the insets for doing the bottom corners
+            corner_insets = round_bottom_corner_lookup[corner_radius];
+
+            inner_rect = GRect(
+                (has_bottom_left_corner ? corner_radius : 0) + rect.origin.x, 
+                middle_rect.origin.y + middle_rect.size.h, 
+                rect.size.w - (has_bottom_left_corner ? corner_radius : 0) - (has_bottom_right_corner ? corner_radius : 0),
+                corner_radius
+            );
+
+            //draw rect between top corners
+            _fill_rect(ctx, inner_rect, pattern);
+
+            if (has_bottom_left_corner)
+            {
+                //draw top left corner
+                _draw_corner(ctx, GPoint(rect.origin.x, inner_rect.origin.y), corner_radius, true, corner_insets, pattern);
+            }
+            if (has_bottom_right_corner)
+            {
+                //draw top right corner
+                _draw_corner(ctx, GPoint(inner_rect.origin.x + inner_rect.size.w, inner_rect.origin.y), corner_radius, false, corner_insets, pattern);
             }
         }
     }
 }
+

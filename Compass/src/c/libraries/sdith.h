@@ -56,7 +56,6 @@ void sdith_set_dither_type(DitherType dither_type);
 void sdith_set_fill_colors(GColor light_color, GColor dark_color);
 void sdith_set_dither_template(DitherTemplate dither_template);
 void sdith_draw_pixel(GContext * ctx, GPoint point);
-void sdith_fill_rect(GContext * ctx, GRect rect);
-// can use dither in such a way that it also works with lines, single pixels, etc...
+void sdith_fill_rect(GContext * ctx, GRect rect, uint16_t corner_radius, GCornerMask corner_mask);
 
 #endif // SDITH_H

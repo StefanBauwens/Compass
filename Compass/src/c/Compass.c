@@ -5,6 +5,7 @@
 
 #include <pebble.h>
 #include "libraries/sdith.h"
+#include "libraries/miniwindow.h"
 
 typedef struct {
     DitherTemplate dither_template;
@@ -75,7 +76,7 @@ static void compass_update_proc(Layer *layer, GContext *ctx) {
       if (color_nr != 0)
       {
         sdith_set_dither_template(color);
-        sdith_fill_rect(ctx, GRect(w * PIXEL_THICKNESS, h * PIXEL_THICKNESS, PIXEL_THICKNESS, PIXEL_THICKNESS));
+        sdith_fill_rect(ctx, GRect(w * PIXEL_THICKNESS, h * PIXEL_THICKNESS, PIXEL_THICKNESS, PIXEL_THICKNESS), 0, GCornerNone);
       }
     }
   }
@@ -164,7 +165,7 @@ static void needle_update_proc(Layer *layer, GContext *ctx)
   for (size_t i = 0; i < ARRAY_LENGTH(s_recorded_draw_commands); i++)
   {
     sdith_set_dither_template(s_recorded_draw_commands[i].dither_template);
-    sdith_fill_rect(ctx, s_recorded_draw_commands[i].rect);
+    sdith_fill_rect(ctx, s_recorded_draw_commands[i].rect, 0, GCornerNone);
   }
 }
 
@@ -186,12 +187,13 @@ static void compass_heading_handler(CompassHeadingData heading_data) {
       text_layer_set_text(s_text_layer, "No compass avaialble!");
       break;
     case CompassStatusCalibrating:
-      //text_layer_set_text(s_text_layer, "Calibrating...");
+      text_layer_set_text(s_text_layer, "Calibrating...");
       s_angle = TRIGANGLE_TO_DEG(TRIG_MAX_ANGLE - heading_data.magnetic_heading) + 180;
       record_needle_draw_commands(); // do heavy lifting here so it doesn't happen in draw command
       layer_mark_dirty(s_needle_layer);
       break;
     case CompassStatusCalibrated:
+      text_layer_set_text(s_text_layer, "Callibrated!");
       s_angle = TRIGANGLE_TO_DEG(TRIG_MAX_ANGLE - heading_data.magnetic_heading) + 180;
       record_needle_draw_commands(); // do heavy lifting here so it doesn't happen in draw command
       layer_mark_dirty(s_needle_layer);
@@ -254,6 +256,9 @@ static void prv_window_load(Window *window) {
   // Sub to ticks
   //milli_tick_handler = app_timer_register(STEP_DELAY, milli_tick, NULL);
 
+  // mini window
+  create_mini_window(window_layer, "title", "this is a body value");
+
   // Subscribe to compass heading updates
   compass_service_subscribe(compass_heading_handler); 
   // Only notify when the heading has changed by more than 5 degrees.
@@ -264,6 +269,7 @@ static void prv_window_unload(Window *window) {
   layer_destroy(s_compass_layer);
   layer_destroy(s_needle_layer);
   text_layer_destroy(s_text_layer);
+  destroy_mini_window();
 
   // Unsubscribe to ticks
   app_timer_cancel(milli_tick_handler);
@@ -279,6 +285,7 @@ static void prv_init(void) {
     .load = prv_window_load,
     .unload = prv_window_unload,
   });
+
   const bool animated = true;
   window_stack_push(s_window, animated);
 }

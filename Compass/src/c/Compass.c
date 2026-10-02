@@ -257,7 +257,7 @@ static void prv_window_load(Window *window) {
   //milli_tick_handler = app_timer_register(STEP_DELAY, milli_tick, NULL);
 
   // mini window
-  create_mini_window(window_layer, "title", "this is a body value");
+  create_mini_window(window_layer, GRect(20, 20, 104, 88), "title", "this is a body value");
 
   // Subscribe to compass heading updates
   compass_service_subscribe(compass_heading_handler); 

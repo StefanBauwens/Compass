@@ -1,11 +1,7 @@
-#define MINI_WINDOW_WIDTH PBL_DISPLAY_WIDTH - 40
-#define MINI_WINDOW_HEIGHT PBL_DISPLAY_HEIGHT - 80
-#define MINI_WINDOW_X 20
-#define MINI_WINDOW_Y 20
 #define MINI_WINDOW_TITLE_HEIGHT 20
-#define MINI_WINDOW_TITLE_WIDTH MINI_WINDOW_WIDTH - 10
-#define MINI_WINDOW_TITLE_X MINI_WINDOW_X + 5
-#define MINI_WINDOW_TITLE_Y MINI_WINDOW_X + 1
+#define MINI_WINDOW_PADDING_HORIZONTAL 5
+#define MINI_WINDOW_PADDING_TOP 1
+#define MINI_WINDOW_BODY_MARGIN 3
 
 
 #include "miniwindow.h"
@@ -17,11 +13,11 @@ static Layer *s_main_layer;
 static Layer *s_window_layer;
 static bool s_is_created = false;
 static bool s_is_showing = false;
-static const GRect s_window_frame = GRect(MINI_WINDOW_X, MINI_WINDOW_Y, MINI_WINDOW_WIDTH, MINI_WINDOW_HEIGHT);
-static const GRect s_title_frame = GRect(MINI_WINDOW_TITLE_X, MINI_WINDOW_TITLE_Y, MINI_WINDOW_TITLE_WIDTH, MINI_WINDOW_TITLE_HEIGHT);
-static const GRect s_body_frame = GRect(MINI_WINDOW_X + 3, MINI_WINDOW_Y + 22, MINI_WINDOW_WIDTH - 6 , MINI_WINDOW_HEIGHT - 25); //TODO test
+static GRect s_window_frame;
+static GRect s_title_frame;
+static GRect s_body_frame;
 
-static const DitherTemplate bg_dith = DITHER_TEMPLATE(DITHER_8, GColorWhite, GColorClear);
+static const DitherTemplate bg_dith = DITHER_TEMPLATE(DITHER_1, GColorWhite, GColorClear);
 
 void main_layer_update_proc(Layer *layer, GContext *ctx) { 
     graphics_context_set_fill_color(ctx, GColorBlack);
@@ -29,14 +25,14 @@ void main_layer_update_proc(Layer *layer, GContext *ctx) {
     //graphics_fill_rect(ctx, GRect(0, 0, s_window_frame.size.w, MINI_WINDOW_TITLE_HEIGHT), 4, GCornersTop); //TODO temp
 
     sdith_set_dither_template(bg_dith);
-    sdith_fill_rect(ctx, GRect(2, 2 + MINI_WINDOW_TITLE_HEIGHT, s_window_frame.size.w-4, s_window_frame.size.h-4- MINI_WINDOW_TITLE_HEIGHT), 2, GCornersBottom);
+    sdith_fill_rect(ctx, GRect(2, 2 + MINI_WINDOW_TITLE_HEIGHT, s_window_frame.size.w-4, s_window_frame.size.h-4- MINI_WINDOW_TITLE_HEIGHT), 3, GCornersBottom);
 
     //TODO temp commented
     //graphics_context_set_fill_color(ctx, GColorWhite);
     //graphics_fill_rect(ctx, GRect(2, 2 + MINI_WINDOW_TITLE_HEIGHT, s_window_frame.size.w-4, s_window_frame.size.h-4- MINI_WINDOW_TITLE_HEIGHT), 2, GCornersBottom);
 }
 
-void create_mini_window(Layer * window_layer, const char * title, const char * body)
+void create_mini_window(Layer * window_layer, GRect rect, const char * title, const char * body)
 {
     if (s_is_created)
     {
@@ -44,6 +40,10 @@ void create_mini_window(Layer * window_layer, const char * title, const char * b
     }
 
     s_window_layer = window_layer;
+    
+    s_window_frame = rect;
+    s_title_frame = GRect(s_window_frame.origin.x + MINI_WINDOW_PADDING_HORIZONTAL, s_window_frame.origin.y + MINI_WINDOW_PADDING_TOP, s_window_frame.size.w - (2 * MINI_WINDOW_PADDING_HORIZONTAL), MINI_WINDOW_TITLE_HEIGHT);
+    s_body_frame = GRect(s_window_frame.origin.x + MINI_WINDOW_BODY_MARGIN, s_window_frame.origin.y + MINI_WINDOW_TITLE_HEIGHT + MINI_WINDOW_BODY_MARGIN, s_window_frame.size.w - (2 * MINI_WINDOW_BODY_MARGIN), s_window_frame.size.h - (MINI_WINDOW_TITLE_HEIGHT + (2 * MINI_WINDOW_BODY_MARGIN)));
 
     // main layer
     s_main_layer = layer_create(s_window_frame);

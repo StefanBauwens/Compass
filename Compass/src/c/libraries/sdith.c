@@ -309,7 +309,7 @@ void _draw_corner(GContext * ctx, GPoint point, int8_t radius, bool is_left_corn
     for (int8_t row = 0; row < radius; row++)
     {
         row_inset = (corner_insets >> (4 * row)) & 0xF; // reading from most right to left
-        length = 8 - row_inset;
+        length = radius - row_inset;
         if (is_left_corner)
         {
             _draw_horizontal_line(ctx, GPoint(point.x + row_inset, point.y + row), length, pattern);
@@ -351,7 +351,7 @@ void sdith_fill_rect(GContext * ctx, GRect rect, uint16_t corner_radius, GCorner
         }
 
         // clamp corner_radius to 8 or to smallest width/height of rect
-        corner_radius = CLAMP(corner_mask, 0, MIN(MIN(8, rect.size.h), rect.size.w));
+        corner_radius = CLAMP(corner_radius, 0, MIN(MIN(8, rect.size.h), rect.size.w));
 
         //  use simple rect fill if corner radius ended up being 0 after clamp
         if (corner_radius == 0)
@@ -377,7 +377,7 @@ void sdith_fill_rect(GContext * ctx, GRect rect, uint16_t corner_radius, GCorner
             inner_rect = GRect(
                 (has_top_left_corner ? corner_radius : 0) + rect.origin.x, 
                 rect.origin.y, 
-                rect.size.w - (has_top_left_corner ? corner_radius : 0) - (has_top_right_corner ? corner_radius : 0),
+                (rect.size.w - (has_top_left_corner ? corner_radius : 0)) - (has_top_right_corner ? corner_radius : 0),
                 corner_radius
             );
 
@@ -413,7 +413,7 @@ void sdith_fill_rect(GContext * ctx, GRect rect, uint16_t corner_radius, GCorner
             inner_rect = GRect(
                 (has_bottom_left_corner ? corner_radius : 0) + rect.origin.x, 
                 middle_rect.origin.y + middle_rect.size.h, 
-                rect.size.w - (has_bottom_left_corner ? corner_radius : 0) - (has_bottom_right_corner ? corner_radius : 0),
+                (rect.size.w - (has_bottom_left_corner ? corner_radius : 0)) - (has_bottom_right_corner ? corner_radius : 0),
                 corner_radius
             );
 

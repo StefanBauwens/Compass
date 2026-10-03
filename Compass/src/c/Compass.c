@@ -76,7 +76,7 @@ static void compass_update_proc(Layer *layer, GContext *ctx) {
       if (color_nr != 0)
       {
         sdith_set_dither_template(color);
-        sdith_fill_rect(ctx, GRect(w * PIXEL_THICKNESS, h * PIXEL_THICKNESS, PIXEL_THICKNESS, PIXEL_THICKNESS), 0, GCornerNone);
+        sdith_fill_rect(layer, ctx, GRect(w * PIXEL_THICKNESS, h * PIXEL_THICKNESS, PIXEL_THICKNESS, PIXEL_THICKNESS), 0, GCornerNone);
       }
     }
   }
@@ -165,7 +165,7 @@ static void needle_update_proc(Layer *layer, GContext *ctx)
   for (size_t i = 0; i < ARRAY_LENGTH(s_recorded_draw_commands); i++)
   {
     sdith_set_dither_template(s_recorded_draw_commands[i].dither_template);
-    sdith_fill_rect(ctx, s_recorded_draw_commands[i].rect, 0, GCornerNone);
+    sdith_fill_rect(layer, ctx, s_recorded_draw_commands[i].rect, 0, GCornerNone);
   }
 }
 
@@ -269,6 +269,7 @@ static void prv_window_unload(Window *window) {
   layer_destroy(s_compass_layer);
   layer_destroy(s_needle_layer);
   text_layer_destroy(s_text_layer);
+  
   destroy_mini_window();
 
   // Unsubscribe to ticks

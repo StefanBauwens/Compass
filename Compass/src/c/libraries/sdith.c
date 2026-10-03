@@ -11,6 +11,10 @@ GColor _light_color = GColorWhite;
 GColor _dark_color = GColorBlack;
 GColor _pixel_color = GColorRichBrilliantLavender;
 
+static void byte_set_bit(uint8_t *byte, uint8_t bit, uint8_t value) {
+  *byte ^= (-value ^ *byte) & (1 << bit);
+}
+
 /* CORNERS START */
 // Taken from graphics.c from PebbleOS, logic is looseley inspired on the code from graphics.c
 static const uint32_t round_top_corner_lookup[] = {
@@ -19,7 +23,6 @@ static const uint32_t round_top_corner_lookup[] = {
 static const uint32_t round_bottom_corner_lookup[] = {
     0x0, 0x01, 0x10, 0x210, 0x3110, 0x32100, 0x432100, 0x5321100, 0x64321100,
 };
-
 /* CORNERS END */
 
 /* DITHER PATTERNS START */
@@ -247,13 +250,10 @@ void sdith_set_dither_template(DitherTemplate dither_template)
     sdith_set_fill_colors(dither_template.light_color, dither_template.dark_color);
 }
 
-void _set_pixel_color(GContext * ctx, GColor color)
+void _set_using_color(GContext * ctx, GColor color)
 {
-    //if (!gcolor_equal(_pixel_color, color))
-    //{
-        _pixel_color = color;
-        graphics_context_set_stroke_color(ctx, color);
-    //}
+    _pixel_color = color;
+    graphics_context_set_stroke_color(ctx, color);
 }
 
 void sdith_draw_pixel(GContext * ctx, GPoint point)
@@ -272,35 +272,51 @@ void sdith_draw_pixel(GContext * ctx, GPoint point)
         color = pattern.pattern[mody * pattern.width + modx] == 1 ? _dark_color : _light_color;
     }
 
-    _set_pixel_color(ctx, color);
+    _set_using_color(ctx, color);
     if (!gcolor_equal(color, GColorClear))
     {
         graphics_draw_pixel(ctx, point);
     }
 }
 
-void _optimzed_draw_pixel(GContext * ctx, GPoint point, DitherPattern pattern)
-{
-    int16_t modx = point.x % pattern.width;
-    int16_t mody = point.y % pattern.height;
-    GColor color = pattern.pattern[mody * pattern.width + modx] == 1 ? _dark_color : _light_color;
-
-    _set_pixel_color(ctx, color);
-    if (!gcolor_equal(color, GColorClear))
+// See: https://developer.repebble.com/guides/graphics-and-animations/framebuffer-graphics/#getting-and-setting-pixels
+void _bitmap_set_pixel_color(GBitmapDataRowInfo info, GPoint absolute_point, DitherPattern pattern) {
+    GColor color = pattern.pattern[(absolute_point.y % pattern.height) * pattern.width + (absolute_point.x % pattern.width)] == 1 ? _dark_color : _light_color;
+    if (gcolor_equal(color, GColorClear))
     {
-        graphics_draw_pixel(ctx, point);
+        return;
+    }
+
+#if defined(PBL_COLOR)
+    // Write the pixel's byte color
+    memset(&info.data[absolute_point.x], color.argb, 1);
+#elif defined(PBL_BW)
+    // Find the correct byte, then set the appropriate bit
+    uint8_t byte = absolute_point.x / 8;
+    uint8_t bit = absolute_point.x % 8; 
+    byte_set_bit(&info.data[byte], bit, gcolor_equal(color, GColorWhite) ? 1 : 0);
+#endif
+}
+
+void _bitmap_draw_horizontal_line(GBitmap * fb, GPoint absolute_point, int16_t length, DitherPattern pattern)
+{
+    if (absolute_point.y < 0 || absolute_point.y >= PBL_DISPLAY_HEIGHT || length < 1)
+    {
+        return;
+    }
+
+    GBitmapDataRowInfo info = gbitmap_get_data_row_info(fb, absolute_point.y);
+
+    int16_t start = MAX(absolute_point.x, info.min_x);
+    int16_t end = MIN(absolute_point.x + length, info.max_x + 1);
+
+    for (int16_t x = start; x < end; x++)
+    {
+        _bitmap_set_pixel_color(info, GPoint(x, absolute_point.y), pattern);
     }
 }
 
-void _draw_horizontal_line(GContext * ctx, GPoint point, int16_t length, DitherPattern pattern)
-{
-    for (int16_t i = 0; i < length; i++)
-    {
-        _optimzed_draw_pixel(ctx, GPoint(point.x + i, point.y), pattern);
-    }
-}
-
-void _draw_corner(GContext * ctx, GPoint point, int8_t radius, bool is_left_corner, uint32_t corner_insets, DitherPattern pattern) // radius MUST be between 0 and 8
+void _bitmap_draw_corner(GBitmap * fb, GPoint absolute_point, int8_t radius, bool is_left_corner, uint32_t corner_insets, DitherPattern pattern) // radius MUST be between 0 and 8
 {
     // not doing any clamping of radius since this is an internal function so *should* be safe
 
@@ -312,27 +328,37 @@ void _draw_corner(GContext * ctx, GPoint point, int8_t radius, bool is_left_corn
         length = radius - row_inset;
         if (is_left_corner)
         {
-            _draw_horizontal_line(ctx, GPoint(point.x + row_inset, point.y + row), length, pattern);
+            _bitmap_draw_horizontal_line(fb, GPoint(absolute_point.x + row_inset, absolute_point.y + row), length, pattern);
         }
         else // right corner
         {
-            _draw_horizontal_line(ctx, GPoint(point.x, point.y + row), length, pattern);
+            _bitmap_draw_horizontal_line(fb, GPoint(absolute_point.x, absolute_point.y + row), length, pattern);
         }
     }
 }
 
-void _fill_rect(GContext * ctx, GRect rect, DitherPattern pattern)
+void _bitmap_fill_rect(GBitmap * fb, GRect absolute_rect, DitherPattern pattern)
 {
-    for (int16_t h = 0; h < rect.size.h; h++)
+    for (int16_t h = 0; h < absolute_rect.size.h; h++)
     {
-        for (int16_t w = 0; w < rect.size.w; w++) 
-        {
-            _optimzed_draw_pixel(ctx, GPoint(rect.origin.x + w, rect.origin.y + h), pattern);
-        }
+        _bitmap_draw_horizontal_line(fb, GPoint(absolute_rect.origin.x, absolute_rect.origin.y + h), absolute_rect.size.w, pattern);
     }
 }
 
-void sdith_fill_rect(GContext * ctx, GRect rect, uint16_t corner_radius, GCornerMask corner_mask)
+GRect _get_constrained_relative_rect(Layer * layer, GRect rect)
+{   
+    // Get absolute bounds of layer
+    GRect bounds = layer_convert_rect_to_screen(layer, layer_get_bounds(layer));
+
+    // Convert to absolute coordinates
+    GRect new_rect = GRect(rect.origin.x + bounds.origin.x, rect.origin.y + bounds.origin.y, rect.size.w, rect.size.h);
+    // Constrain
+    grect_clip(&new_rect, &bounds);
+
+    return new_rect;
+}
+
+void sdith_fill_rect(Layer * layer, GContext * ctx, GRect rect, uint16_t corner_radius, GCornerMask corner_mask)
 {
     if (gcolor_equal(_dark_color, _light_color)) // shortcut for just using regular fill
     {
@@ -344,9 +370,17 @@ void sdith_fill_rect(GContext * ctx, GRect rect, uint16_t corner_radius, GCorner
     {
         DitherPattern pattern = Patterns[_dither_type];
 
+        rect = _get_constrained_relative_rect(layer, rect);
+
+        // get frame buffer
+        GBitmap *fb = graphics_capture_frame_buffer(ctx);
+
         if (corner_mask == GCornerNone || corner_radius == 0)
         {
-            _fill_rect(ctx, rect, pattern);
+            _bitmap_fill_rect(fb, rect, pattern);
+
+            // Release the framebuffer
+            graphics_release_frame_buffer(ctx, fb);
             return;
         }
 
@@ -356,7 +390,10 @@ void sdith_fill_rect(GContext * ctx, GRect rect, uint16_t corner_radius, GCorner
         //  use simple rect fill if corner radius ended up being 0 after clamp
         if (corner_radius == 0)
         {
-            _fill_rect(ctx, rect, pattern);
+            _bitmap_fill_rect(fb, rect, pattern);
+            
+            // Release the framebuffer
+            graphics_release_frame_buffer(ctx, fb);
             return;
         }
 
@@ -382,17 +419,17 @@ void sdith_fill_rect(GContext * ctx, GRect rect, uint16_t corner_radius, GCorner
             );
 
             //draw rect between top corners
-            _fill_rect(ctx, inner_rect, pattern);
+            _bitmap_fill_rect(fb, inner_rect, pattern);
 
             if (has_top_left_corner)
             {
                 //draw top left corner
-                _draw_corner(ctx, rect.origin, corner_radius, true, corner_insets, pattern);
+                _bitmap_draw_corner(fb, rect.origin, corner_radius, true, corner_insets, pattern);
             }
             if (has_top_right_corner)
             {
                 //draw top right corner
-                _draw_corner(ctx, GPoint(inner_rect.origin.x + inner_rect.size.w, rect.origin.y), corner_radius, false, corner_insets, pattern);
+                _bitmap_draw_corner(fb, GPoint(inner_rect.origin.x + inner_rect.size.w, rect.origin.y), corner_radius, false, corner_insets, pattern);
             }
         }
 
@@ -403,7 +440,7 @@ void sdith_fill_rect(GContext * ctx, GRect rect, uint16_t corner_radius, GCorner
             rect.size.w, 
             MAX(rect.size.h - ((has_top_left_corner || has_top_right_corner) ? corner_radius : 0 ) - ((has_bottom_left_corner || has_bottom_right_corner) ? corner_radius : 0), 0)
         );
-        _fill_rect(ctx, middle_rect, pattern);
+        _bitmap_fill_rect(fb, middle_rect, pattern);
 
         if (has_bottom_left_corner || has_bottom_right_corner)
         {
@@ -418,19 +455,22 @@ void sdith_fill_rect(GContext * ctx, GRect rect, uint16_t corner_radius, GCorner
             );
 
             //draw rect between top corners
-            _fill_rect(ctx, inner_rect, pattern);
+            _bitmap_fill_rect(fb, inner_rect, pattern);
 
             if (has_bottom_left_corner)
             {
                 //draw top left corner
-                _draw_corner(ctx, GPoint(rect.origin.x, inner_rect.origin.y), corner_radius, true, corner_insets, pattern);
+                _bitmap_draw_corner(fb, GPoint(rect.origin.x, inner_rect.origin.y), corner_radius, true, corner_insets, pattern);
             }
             if (has_bottom_right_corner)
             {
                 //draw top right corner
-                _draw_corner(ctx, GPoint(inner_rect.origin.x + inner_rect.size.w, inner_rect.origin.y), corner_radius, false, corner_insets, pattern);
+                _bitmap_draw_corner(fb, GPoint(inner_rect.origin.x + inner_rect.size.w, inner_rect.origin.y), corner_radius, false, corner_insets, pattern);
             }
         }
+
+        // Release the framebuffer
+        graphics_release_frame_buffer(ctx, fb);
     }
 }
 

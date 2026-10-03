@@ -275,6 +275,7 @@ void sdith_draw_pixel(GContext * ctx, GPoint point)
     _set_using_color(ctx, color);
     if (!gcolor_equal(color, GColorClear))
     {
+        graphics_context_set_stroke_width(ctx, 1);
         graphics_draw_pixel(ctx, point);
     }
 }

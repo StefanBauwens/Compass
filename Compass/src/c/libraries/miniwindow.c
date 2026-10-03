@@ -17,15 +17,23 @@ static GRect s_window_frame;
 static GRect s_title_frame;
 static GRect s_body_frame;
 
-static const DitherTemplate bg_dith = DITHER_TEMPLATE(DITHER_1, GColorWhite, GColorBlack); //TODO temp
+static const DitherTemplate bg_dith = DITHER_TEMPLATE(DITHER_7, GColorClear, GColorWhite); //TODO temp
 
 void main_layer_update_proc(Layer *layer, GContext *ctx) { 
     graphics_context_set_fill_color(ctx, GColorBlack);
-    graphics_fill_rect(ctx, GRect(0, 0, s_window_frame.size.w, s_window_frame.size.h), 4, GCornersAll);
-    //graphics_fill_rect(ctx, GRect(0, 0, s_window_frame.size.w, MINI_WINDOW_TITLE_HEIGHT), 4, GCornersTop); //TODO temp
+    //graphics_fill_rect(ctx, GRect(0, 0, s_window_frame.size.w, s_window_frame.size.h), 4, GCornersAll);
+    graphics_fill_rect(ctx, GRect(2, 2, s_window_frame.size.w, MINI_WINDOW_TITLE_HEIGHT), 4, GCornersTop); //TODO temp
+
 
     sdith_set_dither_template(bg_dith);
-    sdith_fill_rect(layer, ctx, GRect(2, 2 + MINI_WINDOW_TITLE_HEIGHT, s_window_frame.size.w-4, s_window_frame.size.h-4- MINI_WINDOW_TITLE_HEIGHT), 3, GCornersBottom);
+    sdith_fill_rect(layer, ctx, GRect(0, MINI_WINDOW_TITLE_HEIGHT, s_window_frame.size.w, s_window_frame.size.h - MINI_WINDOW_TITLE_HEIGHT), 4, GCornersBottom);
+
+    graphics_context_set_stroke_width(ctx, 2);
+    graphics_draw_round_rect(ctx, GRect(2, 2, s_window_frame.size.w-4, s_window_frame.size.h-4), 6);
+    graphics_context_set_stroke_width(ctx, 1);
+    graphics_context_set_stroke_color(ctx, GColorWhite); //TODO wip
+    graphics_draw_round_rect(ctx, GRect(1, 1, s_window_frame.size.w-1, s_window_frame.size.h-1), 8);
+
 
     //TODO temp commented
     //graphics_context_set_fill_color(ctx, GColorWhite);

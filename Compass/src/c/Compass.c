@@ -35,6 +35,58 @@ static const uint8_t s_compass[] = {
   0,0,0,0,6,6,6,6,6,6,0,0,0,0
 };
 
+/* MENU */
+static Window *s_menu_window;
+static SimpleMenuLayer *s_menu_layer;
+
+static void menu_select_callback(int index, void *context) {
+  switch (index) {
+    case 0:
+      //TODO add submenu (dynamic created)
+      break;
+
+    case 1:
+      show_mini_window();
+      window_stack_pop(false);
+      break;
+  }
+}
+
+static SimpleMenuItem s_main_menu_items[3] = {
+  { .title = "Point to...", .callback = menu_select_callback },
+  { .title = "Calibration Info", .callback = menu_select_callback },
+};
+
+static SimpleMenuSection s_main_menu_sections[] = {
+  {
+    .title = NULL,
+    .items = s_main_menu_items,
+    .num_items = 2
+  }
+};
+
+static void menu_window_load(Window *window) {
+  s_menu_layer = simple_menu_layer_create(
+    layer_get_bounds(window_get_root_layer(window)),
+    window,
+    s_main_menu_sections,
+    1,
+    NULL
+  );
+
+  layer_add_child(
+    window_get_root_layer(window),
+    simple_menu_layer_get_layer(s_menu_layer)
+  );
+}
+
+static void menu_window_unload(Window *window) {
+  simple_menu_layer_destroy(s_menu_layer);
+  s_menu_layer = NULL;
+}
+
+/* END MENU */
+
 #if defined(PBL_COLOR)
 static const DitherTemplate s_color_palette[] = {
   COLOR_TEMPLATE(GColorClear),                              // = 0
@@ -202,7 +254,8 @@ static void compass_heading_handler(CompassHeadingData heading_data) {
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
-  //hide_mini_window();
+  hide_mini_window();
+  window_stack_push(s_menu_window, true); 
 }
 
 static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -262,7 +315,7 @@ static void prv_window_load(Window *window) {
 
   // mini window
   DitherTemplate background = DITHER_TEMPLATE(DITHER_BLANK, GColorWhite, GColorWhite);
-  create_mini_window(window_layer, GRect(10, 10, 124, 134), "Calibration Info", "❎ Not calibrated\n C  Calibrating\n✅ Calibrated\n\nCalibrate watch by moving in an 8 figure.", background);
+  create_mini_window(window_layer, GRect(10, 10, 124, 134), "Calibration Info", "❎ Not calibrated\n C  Calibrating\n✅ Calibrated\n\nCalibrate watch by moving in an 8 figure repeatedly.", background);
 
   // Subscribe to compass heading updates
   compass_service_subscribe(compass_heading_handler); 
@@ -292,12 +345,20 @@ static void prv_init(void) {
     .unload = prv_window_unload,
   });
 
+  s_menu_window = window_create();  
+  window_set_window_handlers(s_menu_window, (WindowHandlers) {
+    .load = menu_window_load,
+    .unload = menu_window_unload
+  });
+
+
   const bool animated = true;
   window_stack_push(s_window, animated);
 }
 
 static void prv_deinit(void) {
   window_destroy(s_window);
+  window_destroy(s_menu_window);
 }
 
 int main(void) {

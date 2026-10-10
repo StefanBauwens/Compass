@@ -11,5 +11,6 @@ void create_mini_window(Layer * window_layer, GRect rect, const char * title, co
 void destroy_mini_window();
 void show_mini_window();
 void hide_mini_window();
+bool is_showing_mini_window();
 
 #endif // MINIWINDOW_H

@@ -112,3 +112,8 @@ void hide_mini_window()
         s_is_showing = false;
     }
 }
+
+bool is_showing_mini_window()
+{
+    return s_is_showing;
+}

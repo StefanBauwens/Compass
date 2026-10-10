@@ -181,19 +181,19 @@ static void compass_heading_handler(CompassHeadingData heading_data) {
   // Is the compass calibrated?
   switch(heading_data.compass_status) {
     case CompassStatusDataInvalid:
-      text_layer_set_text(s_text_layer, "Not yet calibrated...");
+      text_layer_set_text(s_text_layer, "❎");
       break;
     case CompassStatusUnavailable:
-      text_layer_set_text(s_text_layer, "No compass avaialble!");
+      text_layer_set_text(s_text_layer, "❗");
       break;
     case CompassStatusCalibrating:
-      text_layer_set_text(s_text_layer, "Calibrating...");
+      text_layer_set_text(s_text_layer, "C");
       s_angle = TRIGANGLE_TO_DEG(TRIG_MAX_ANGLE - heading_data.magnetic_heading) + 180;
       record_needle_draw_commands(); // do heavy lifting here so it doesn't happen in draw command
       layer_mark_dirty(s_needle_layer);
       break;
     case CompassStatusCalibrated:
-      text_layer_set_text(s_text_layer, "Callibrated!");
+      text_layer_set_text(s_text_layer, "✅");
       s_angle = TRIGANGLE_TO_DEG(TRIG_MAX_ANGLE - heading_data.magnetic_heading) + 180;
       record_needle_draw_commands(); // do heavy lifting here so it doesn't happen in draw command
       layer_mark_dirty(s_needle_layer);
@@ -202,29 +202,33 @@ static void compass_heading_handler(CompassHeadingData heading_data) {
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
-  text_layer_set_text(s_text_layer, "Select");
+  //hide_mini_window();
 }
 
 static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
-  s_angle+=1;
-  layer_mark_dirty(s_needle_layer);
-  static char progress_text[25];
-  snprintf(progress_text, sizeof(progress_text), "angle %ld", s_angle);
-  text_layer_set_text(s_text_layer, progress_text);
+  //hide_mini_window();
 }
 
 static void prv_down_click_handler(ClickRecognizerRef recognizer, void *context) {
-  s_angle-=1;
-  layer_mark_dirty(s_needle_layer);
-  static char progress_text[25];
-  snprintf(progress_text, sizeof(progress_text), "Angle %ld", s_angle);
-  text_layer_set_text(s_text_layer, progress_text);
+  //hide_mini_window();
+}
+
+static void prv_back_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if (is_showing_mini_window())
+  {
+    hide_mini_window();
+  }
+  else
+  {
+    window_stack_pop(true);
+  }
 }
 
 static void prv_click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_SELECT, prv_select_click_handler);
   window_single_click_subscribe(BUTTON_ID_UP, prv_up_click_handler);
   window_single_click_subscribe(BUTTON_ID_DOWN, prv_down_click_handler);
+  window_single_click_subscribe(BUTTON_ID_BACK, prv_back_click_handler);
 }
 
 static void prv_window_load(Window *window) {
@@ -238,7 +242,7 @@ static void prv_window_load(Window *window) {
   uint8_t y0_compass = (PBL_DISPLAY_HEIGHT - height_compass) / 2;
 
   // text layer
-  s_text_layer = text_layer_create(GRect(0, y0_compass + height_compass + 5, bounds.size.w, 20));
+  s_text_layer = text_layer_create(GRect(0, 0, 15, 15));
   //text_layer_set_text(s_text_layer, "Press a button");
   text_layer_set_text_alignment(s_text_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_text_layer));
@@ -258,7 +262,7 @@ static void prv_window_load(Window *window) {
 
   // mini window
   DitherTemplate background = DITHER_TEMPLATE(DITHER_BLANK, GColorWhite, GColorWhite);
-  create_mini_window(window_layer, GRect(20, 20, 104, 104), "Title long long test", "This is a body value. Very cool! How much longer can we go?", background);
+  create_mini_window(window_layer, GRect(10, 10, 124, 134), "Calibration Info", "❎ Not calibrated\n C  Calibrating\n✅ Calibrated\n\nCalibrate watch by moving in an 8 figure.", background);
 
   // Subscribe to compass heading updates
   compass_service_subscribe(compass_heading_handler); 

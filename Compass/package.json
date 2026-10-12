@@ -2,14 +2,21 @@
   "name": "Compass",
   "author": "Stefan Bauwens",
   "version": "1.0.0",
-  "keywords": ["pebble-app"],
+  "keywords": [
+    "pebble-app"
+  ],
   "private": true,
-  "dependencies": {},
+  "dependencies": {
+    "@rebble/clay": "^1.1.0"
+  },
   "pebble": {
     "displayName": "Compass",
     "uuid": "4a63b79d-efeb-43f7-af9c-cecb5b8049fe",
     "sdkVersion": "3",
     "enableMultiJS": true,
+    "capabilities": [
+      "configurable"
+    ],
     "targetPlatforms": [
       "aplite",
       "basalt",
@@ -22,15 +29,34 @@
       "watchface": false
     },
     "messageKeys": [
-      "dummy"
+      "JSReady",
+      "UseMetricSystem",
+      "DistanceToLocation",
+      "AngleToLocation",
+      "SelectedLocation",
+      "Location1Name",
+      "Location1Lat",
+      "Location1Long",
+      "Location2Name",
+      "Location2Lat",
+      "Location2Long",
+      "Location3Name",
+      "Location3Lat",
+      "Location3Long",
+      "Location4Name",
+      "Location4Lat",
+      "Location4Long",
+      "Location5Name",
+      "Location5Lat",
+      "Location5Long"
     ],
     "resources": {
       "media": [
         {
-            "menuIcon": true,
-            "type": "bitmap",
-            "name": "APP_ICON",
-            "file": "images/app_icon.png"
+          "menuIcon": true,
+          "type": "bitmap",
+          "name": "APP_ICON",
+          "file": "images/app_icon.png"
         }
       ]
     }

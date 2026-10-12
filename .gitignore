@@ -1,2 +1,3 @@
 build/
 Compass/.lock-waf_linux_build
+node_modules/

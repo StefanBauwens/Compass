@@ -1,0 +1,217 @@
+[
+  { 
+    "type": "heading", 
+    "defaultValue": "Compass" 
+  }, 
+  { 
+    "type": "text", 
+    "defaultValue": "Created by Stefan Bauwens 2026" 
+  },
+  {
+    "type": "section",
+    "items": [
+      {
+        "type": "heading",
+        "defaultValue": "General"
+      },
+      {
+        "type": "toggle",
+        "messageKey": "UseMetricSystem",
+        "label": "Use Metric System",
+        "defaultValue": true
+      }
+    ]
+  },
+  {
+    "type": "section",
+    "items": [
+      {
+        "type": "heading",
+        "defaultValue": "Locations"
+      },
+      {
+        "type": "text",
+        "defaultValue": "Setup your locations/headings here."
+      }
+    ]
+  },
+  {
+    "type": "section",
+    "items": [
+      {
+        "type": "input",
+        "messageKey": "Location1Name",
+        "label": "Name",
+        "defaultValue": "",
+        "attributes": {
+          "placeholder": "Washington, D.C.",
+          "maxlength": 19
+        }
+      },
+      {
+        "type": "input",
+        "messageKey": "Location1Lat",
+        "label": "Latitude",
+        "defaultValue": "",
+        "attributes": {
+          "placeholder": "38.9072",
+          "type": "number"
+        }
+      },
+      {
+        "type": "input",
+        "messageKey": "Location1Long",
+        "label": "Longitude",
+        "defaultValue": "",
+        "attributes": {
+          "placeholder": "-77.0369",
+          "type": "number"
+        }
+      }
+    ]
+  },
+  {
+    "type": "section",
+    "items": [
+      {
+        "type": "input",
+        "messageKey": "Location2Name",
+        "label": "Name",
+        "defaultValue": "",
+        "attributes": {
+          "placeholder": "Washington, D.C.",
+          "maxlength": 19
+        }
+      },
+      {
+        "type": "input",
+        "messageKey": "Location2Lat",
+        "label": "Latitude",
+        "defaultValue": "",
+        "attributes": {
+          "placeholder": "38.9072",
+          "type": "number"
+        }
+      },
+      {
+        "type": "input",
+        "messageKey": "Location2Long",
+        "label": "Longitude",
+        "defaultValue": "",
+        "attributes": {
+          "placeholder": "-77.0369",
+          "type": "number"
+        }
+      }
+    ]
+  },
+  {
+    "type": "section",
+    "items": [
+      {
+        "type": "input",
+        "messageKey": "Location3Name",
+        "label": "Name",
+        "defaultValue": "",
+        "attributes": {
+          "placeholder": "Washington, D.C.",
+          "maxlength": 19
+        }
+      },
+      {
+        "type": "input",
+        "messageKey": "Location3Lat",
+        "label": "Latitude",
+        "defaultValue": "",
+        "attributes": {
+          "placeholder": "38.9072",
+          "type": "number"
+        }
+      },
+      {
+        "type": "input",
+        "messageKey": "Location3Long",
+        "label": "Longitude",
+        "defaultValue": "",
+        "attributes": {
+          "placeholder": "-77.0369",
+          "type": "number"
+        }
+      }
+    ]
+  },
+  {
+    "type": "section",
+    "items": [
+      {
+        "type": "input",
+        "messageKey": "Location4Name",
+        "label": "Name",
+        "defaultValue": "",
+        "attributes": {
+          "placeholder": "Washington, D.C.",
+          "maxlength": 19
+        }
+      },
+      {
+        "type": "input",
+        "messageKey": "Location4Lat",
+        "label": "Latitude",
+        "defaultValue": "",
+        "attributes": {
+          "placeholder": "38.9072",
+          "type": "number"
+        }
+      },
+      {
+        "type": "input",
+        "messageKey": "Location4Long",
+        "label": "Longitude",
+        "defaultValue": "",
+        "attributes": {
+          "placeholder": "-77.0369",
+          "type": "number"
+        }
+      }
+    ]
+  },
+  {
+    "type": "section",
+    "items": [
+      {
+        "type": "input",
+        "messageKey": "Location5Name",
+        "label": "Name",
+        "defaultValue": "",
+        "attributes": {
+          "placeholder": "Washington, D.C.",
+          "maxlength": 19
+        }
+      },
+      {
+        "type": "input",
+        "messageKey": "Location5Lat",
+        "label": "Latitude",
+        "defaultValue": "",
+        "attributes": {
+          "placeholder": "38.9072",
+          "type": "number"
+        }
+      },
+      {
+        "type": "input",
+        "messageKey": "Location5Long",
+        "label": "Longitude",
+        "defaultValue": "",
+        "attributes": {
+          "placeholder": "-77.0369",
+          "type": "number"
+        }
+      }
+    ]
+  },
+  {
+    "type": "submit",
+    "defaultValue": "Save"
+  }
+]

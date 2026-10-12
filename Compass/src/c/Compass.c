@@ -2,10 +2,15 @@
 #define COMPASS_HEIGHT 12
 #define STEP_DELAY 150 //ms
 #define PIXEL_THICKNESS 10
+#define SETTINGS_KEY 1
+#define CUSTOM_LOCATIONS_COUNT 5
 
 #include <pebble.h>
 #include "libraries/sdith.h"
 #include "libraries/miniwindow.h"
+
+static void s_set_heading_items();
+static void s_select_heading(int index);
 
 typedef struct {
     DitherTemplate dither_template;
@@ -35,14 +40,166 @@ static const uint8_t s_compass[] = {
   0,0,0,0,6,6,6,6,6,6,0,0,0,0
 };
 
-/* MENU */
-static Window *s_menu_window;
-static SimpleMenuLayer *s_menu_layer;
+/* CONFIG */
+typedef struct ClaySettings {
+  bool UseMetricSystem;
+  char Location1Name[20];
+  char Location2Name[20];
+  char Location3Name[20];
+  char Location4Name[20];
+  char Location5Name[20];
+} ClaySettings;
 
-static void menu_select_callback(int index, void *context) {
+static ClaySettings settings = {0};
+
+static void save_settings() {
+  persist_write_data(SETTINGS_KEY, &settings, sizeof(settings));
+  s_set_heading_items();
+}
+
+static void load_settings() {
+  if (persist_exists(SETTINGS_KEY)) {
+    persist_read_data(SETTINGS_KEY, &settings, sizeof(settings));
+    s_set_heading_items();
+  }
+}
+/* END CONFIG */
+
+/* HEADING MENU */
+static Window *s_heading_menu_window;
+static SimpleMenuLayer *s_heading_menu_layer;
+
+static void heading_menu_select_callback(int index, void *context) {
   switch (index) {
     case 0:
-      //TODO add submenu (dynamic created)
+      //TODO make all headings actually work
+      s_select_heading(0);
+      break;
+    case 1:
+      if (settings.Location1Name[0] != '\0')
+      {
+        s_select_heading(1);
+      }
+      break;
+    case 2:
+      if (settings.Location2Name[0] != '\0')
+      {
+        s_select_heading(2);
+      }
+      break;
+    case 3:
+      if (settings.Location3Name[0] != '\0')
+      {
+        s_select_heading(3);
+      }
+      break;
+    case 4:
+      if (settings.Location4Name[0] != '\0')
+      {
+        s_select_heading(4);
+      }
+      break;
+    case 5:
+      if (settings.Location5Name[0] != '\0')
+      {
+        s_select_heading(5);
+      }
+      break;
+  }
+}
+
+static SimpleMenuItem s_heading_menu_items[6] = {
+  { .title = "North", .subtitle = "Selected", .callback = heading_menu_select_callback },
+  { .title = "Empty", .callback = heading_menu_select_callback }, // filled in later
+  { .title = "Empty", .callback = heading_menu_select_callback },
+  { .title = "Empty", .callback = heading_menu_select_callback },
+  { .title = "Empty", .callback = heading_menu_select_callback },
+  { .title = "Empty", .callback = heading_menu_select_callback }
+};
+
+static void s_select_heading(int index) {
+  for (int i = 0; i < CUSTOM_LOCATIONS_COUNT + 1; i++) // + 1 for north
+  {
+    if (i == index) {
+      s_heading_menu_items[i].subtitle = "Selected";
+    } else {
+      s_heading_menu_items[i].subtitle = "";
+    }
+  }
+  layer_mark_dirty(simple_menu_layer_get_layer(s_heading_menu_layer));
+}
+
+static SimpleMenuSection s_heading_menu_sections[] = {
+  {
+    .title = NULL,
+    .items = s_heading_menu_items,
+    .num_items = 6 
+  }
+};
+
+static void s_set_heading_items() {
+    if (settings.Location1Name[0] != '\0') {
+      s_heading_menu_items[1].title = settings.Location1Name;
+    } else {
+      s_heading_menu_items[1].title = "Empty";
+    }
+
+    if (settings.Location2Name[0] != '\0') {
+      s_heading_menu_items[2].title = settings.Location2Name;
+    } else {
+      s_heading_menu_items[2].title = "Empty";
+    }
+
+    if (settings.Location3Name[0] != '\0') {
+      s_heading_menu_items[3].title = settings.Location3Name;
+    } else {
+      s_heading_menu_items[3].title = "Empty";
+    }
+
+    if (settings.Location4Name[0] != '\0') {
+      s_heading_menu_items[4].title = settings.Location4Name;
+    } else {
+      s_heading_menu_items[4].title = "Empty";
+    }
+
+    if (settings.Location5Name[0] != '\0') {
+      s_heading_menu_items[5].title = settings.Location5Name;
+    } else {
+      s_heading_menu_items[5].title = "Empty";
+    }
+}
+
+static void heading_menu_window_load(Window *window) {
+  s_heading_menu_layer = simple_menu_layer_create(
+    layer_get_bounds(window_get_root_layer(window)),
+    window,
+    s_heading_menu_sections,
+    1,
+    NULL
+  );
+
+  layer_add_child(
+    window_get_root_layer(window),
+    simple_menu_layer_get_layer(s_heading_menu_layer)
+  );
+}
+
+static void heading_menu_window_unload(Window *window) {
+  simple_menu_layer_destroy(s_heading_menu_layer);
+  s_heading_menu_layer = NULL;
+}
+
+/* END HEADING MENU */
+
+/* MAIN MENU */
+static Window *s_main_menu_window;
+static SimpleMenuLayer *s_main_menu_layer;
+
+static void main_menu_select_callback(int index, void *context) {
+  switch (index) {
+    case 0:
+      // open submenu
+      window_stack_push(s_heading_menu_window, true);
       break;
 
     case 1:
@@ -53,8 +210,8 @@ static void menu_select_callback(int index, void *context) {
 }
 
 static SimpleMenuItem s_main_menu_items[3] = {
-  { .title = "Point to...", .callback = menu_select_callback },
-  { .title = "Calibration Info", .callback = menu_select_callback },
+  { .title = "Set Heading", .callback = main_menu_select_callback },
+  { .title = "Calibration Info", .callback = main_menu_select_callback },
 };
 
 static SimpleMenuSection s_main_menu_sections[] = {
@@ -65,8 +222,8 @@ static SimpleMenuSection s_main_menu_sections[] = {
   }
 };
 
-static void menu_window_load(Window *window) {
-  s_menu_layer = simple_menu_layer_create(
+static void main_menu_window_load(Window *window) {
+  s_main_menu_layer = simple_menu_layer_create(
     layer_get_bounds(window_get_root_layer(window)),
     window,
     s_main_menu_sections,
@@ -76,16 +233,16 @@ static void menu_window_load(Window *window) {
 
   layer_add_child(
     window_get_root_layer(window),
-    simple_menu_layer_get_layer(s_menu_layer)
+    simple_menu_layer_get_layer(s_main_menu_layer)
   );
 }
 
-static void menu_window_unload(Window *window) {
-  simple_menu_layer_destroy(s_menu_layer);
-  s_menu_layer = NULL;
+static void main_menu_window_unload(Window *window) {
+  simple_menu_layer_destroy(s_main_menu_layer);
+  s_main_menu_layer = NULL;
 }
 
-/* END MENU */
+/* END MAIN MENU */
 
 #if defined(PBL_COLOR)
 static const DitherTemplate s_color_palette[] = {
@@ -245,7 +402,7 @@ static void compass_heading_handler(CompassHeadingData heading_data) {
       layer_mark_dirty(s_needle_layer);
       break;
     case CompassStatusCalibrated:
-      text_layer_set_text(s_text_layer, "✅");
+      //text_layer_set_text(s_text_layer, "✅");
       s_angle = TRIGANGLE_TO_DEG(TRIG_MAX_ANGLE - heading_data.magnetic_heading) + 180;
       record_needle_draw_commands(); // do heavy lifting here so it doesn't happen in draw command
       layer_mark_dirty(s_needle_layer);
@@ -253,9 +410,59 @@ static void compass_heading_handler(CompassHeadingData heading_data) {
   }
 }
 
+static void prv_inbox_received_handler(DictionaryIterator *iter, void *context) {
+
+  bool saveSettings = false;
+  Tuple *use_metric_t = dict_find(iter, MESSAGE_KEY_UseMetricSystem);
+  if(use_metric_t) {
+    settings.UseMetricSystem = use_metric_t->value->int32 == 1;
+    saveSettings = true;
+  }
+  
+  Tuple *location_1_name_t = dict_find(iter, MESSAGE_KEY_Location1Name);
+  if (location_1_name_t) {
+    snprintf(settings.Location1Name, sizeof(settings.Location1Name), "%s", location_1_name_t->value->cstring);
+    saveSettings = true;
+  }
+
+  Tuple *location_2_name_t = dict_find(iter, MESSAGE_KEY_Location2Name);
+  if (location_2_name_t) {
+    snprintf(settings.Location2Name, sizeof(settings.Location2Name), "%s", location_2_name_t->value->cstring);
+    saveSettings = true;
+  }
+
+  Tuple *location_3_name_t = dict_find(iter, MESSAGE_KEY_Location3Name);
+  if (location_3_name_t) {
+    snprintf(settings.Location3Name, sizeof(settings.Location3Name), "%s", location_3_name_t->value->cstring);
+    saveSettings = true;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Character: '%c'", settings.Location3Name[0]);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "ASCII value: %d", (unsigned char)settings.Location3Name[0]);
+  }
+
+  Tuple *location_4_name_t = dict_find(iter, MESSAGE_KEY_Location4Name);
+  if (location_4_name_t) {
+    snprintf(settings.Location4Name, sizeof(settings.Location4Name), "%s", location_4_name_t->value->cstring);
+    saveSettings = true;
+  }
+
+  Tuple *location_5_name_t = dict_find(iter, MESSAGE_KEY_Location5Name);
+  if (location_5_name_t) {
+    snprintf(settings.Location5Name, sizeof(settings.Location5Name), "%s", location_5_name_t->value->cstring);
+    saveSettings = true;
+  }
+
+  if (saveSettings)
+  {
+    save_settings();
+  }
+
+  //TODO save the long and lat? OR consider doing some of the calculations on the js end? just pass the relative angle to north? (need to be polled of course if we're closer). Either way we need to "pol" because we need to update our location so we might as well do the heavy math on js end
+ 
+}
+
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
   hide_mini_window();
-  window_stack_push(s_menu_window, true); 
+  window_stack_push(s_main_menu_window, true); 
 }
 
 static void prv_up_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -288,6 +495,9 @@ static void prv_window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
 
+  // Load persistant settings
+  load_settings();
+
   // calculate values for compass
   uint8_t width_compass = (COMPASS_WIDTH * PIXEL_THICKNESS);
   uint8_t height_compass = (COMPASS_HEIGHT * PIXEL_THICKNESS);
@@ -315,7 +525,7 @@ static void prv_window_load(Window *window) {
 
   // mini window
   DitherTemplate background = DITHER_TEMPLATE(DITHER_BLANK, GColorWhite, GColorWhite);
-  create_mini_window(window_layer, GRect(10, 10, 124, 134), "Calibration Info", "❎ Not calibrated\n C  Calibrating\n✅ Calibrated\n\nCalibrate watch by moving in an 8 figure repeatedly.", background);
+  create_mini_window(window_layer, GRect(10, 10, 124, 134), "Calibration Info", "❎ Not calibrated\n C Busy Calibrating\n\nCalibrate watch by moving in an 8 figure till no symbol is visible.", background);
 
   // Subscribe to compass heading updates
   compass_service_subscribe(compass_heading_handler); 
@@ -345,12 +555,23 @@ static void prv_init(void) {
     .unload = prv_window_unload,
   });
 
-  s_menu_window = window_create();  
-  window_set_window_handlers(s_menu_window, (WindowHandlers) {
-    .load = menu_window_load,
-    .unload = menu_window_unload
+  s_main_menu_window = window_create();  
+  window_set_window_handlers(s_main_menu_window, (WindowHandlers) {
+    .load = main_menu_window_load,
+    .unload = main_menu_window_unload
   });
 
+  s_heading_menu_window = window_create();  
+  window_set_window_handlers(s_heading_menu_window, (WindowHandlers) {
+    .load = heading_menu_window_load,
+    .unload = heading_menu_window_unload
+  });
+
+  load_settings();
+
+  // Open AppMessage connection
+  app_message_register_inbox_received(prv_inbox_received_handler);
+  app_message_open(256, 256);
 
   const bool animated = true;
   window_stack_push(s_window, animated);
@@ -358,7 +579,8 @@ static void prv_init(void) {
 
 static void prv_deinit(void) {
   window_destroy(s_window);
-  window_destroy(s_menu_window);
+  window_destroy(s_main_menu_window);
+  window_destroy(s_heading_menu_window);
 }
 
 int main(void) {

@@ -2,8 +2,9 @@
 #define COMPASS_HEIGHT 12
 #define STEP_DELAY 150 //ms
 #define PIXEL_THICKNESS 10
-#define SETTINGS_KEY 1
 #define CUSTOM_LOCATIONS_COUNT 5
+#define SETTINGS_KEY 1
+#define SELECTED_HEADING_KEY 2
 
 #include <pebble.h>
 #include "libraries/sdith.h"
@@ -11,6 +12,7 @@
 
 static void s_set_heading_items();
 static void s_select_heading(int index);
+static void heading_menu_select_callback(int index, void *context);
 
 typedef struct {
     DitherTemplate dither_template;
@@ -40,6 +42,33 @@ static const uint8_t s_compass[] = {
   0,0,0,0,6,6,6,6,6,6,0,0,0,0
 };
 
+/* SENDING */
+static bool s_js_ready;
+
+static bool send_dict_int(uint32_t key, int value) {
+  // Declare the dictionary's iterator
+  DictionaryIterator *out_iter;
+
+  // Prepare the outbox buffer for this message
+  AppMessageResult result = app_message_outbox_begin(&out_iter);
+  if(result == APP_MSG_OK) {
+    dict_write_int(out_iter, key, &value, sizeof(int), true);
+
+    // Send this message
+    result = app_message_outbox_send();
+    if(result != APP_MSG_OK) {
+      // Error sending the outbox
+      return false;
+    } else {
+      return true;
+    }
+  } else {
+    // The outbox cannot be used right now
+    return false;;
+  }
+}
+/* END SENDING*/
+
 /* CONFIG */
 typedef struct ClaySettings {
   bool UseMetricSystem;
@@ -61,6 +90,19 @@ static void load_settings() {
   if (persist_exists(SETTINGS_KEY)) {
     persist_read_data(SETTINGS_KEY, &settings, sizeof(settings));
     s_set_heading_items();
+  }
+}
+
+static int selected_heading = 0; // north is default
+
+static void save_heading() {
+  persist_write_int(SELECTED_HEADING_KEY, selected_heading);
+}
+
+static void load_heading() { // gets called only when js_ready is true, since this indirectly sends heading to phone
+  if (persist_exists(SELECTED_HEADING_KEY)) {
+    int heading = persist_read_int(SELECTED_HEADING_KEY);
+    heading_menu_select_callback(heading, NULL); // indirectly sets selected_heading if valid
   }
 }
 /* END CONFIG */
@@ -117,16 +159,24 @@ static SimpleMenuItem s_heading_menu_items[6] = {
   { .title = "Empty", .callback = heading_menu_select_callback }
 };
 
-static void s_select_heading(int index) {
-  for (int i = 0; i < CUSTOM_LOCATIONS_COUNT + 1; i++) // + 1 for north
+static void s_select_heading(int index) 
+{
+  bool success = send_dict_int(MESSAGE_KEY_SelectedLocation, index);
+  if (success && selected_heading != index) // only mark selected if message sending was valid and selected heading has changed
   {
-    if (i == index) {
-      s_heading_menu_items[i].subtitle = "Selected";
-    } else {
-      s_heading_menu_items[i].subtitle = "";
+    selected_heading = index; 
+    save_heading();
+
+    for (int i = 0; i < CUSTOM_LOCATIONS_COUNT + 1; i++) // + 1 for north
+    {
+      if (i == index) {
+        s_heading_menu_items[i].subtitle = "Selected";
+      } else {
+        s_heading_menu_items[i].subtitle = "";
+      }
     }
+    layer_mark_dirty(simple_menu_layer_get_layer(s_heading_menu_layer));
   }
-  layer_mark_dirty(simple_menu_layer_get_layer(s_heading_menu_layer));
 }
 
 static SimpleMenuSection s_heading_menu_sections[] = {
@@ -411,6 +461,15 @@ static void compass_heading_handler(CompassHeadingData heading_data) {
 }
 
 static void prv_inbox_received_handler(DictionaryIterator *iter, void *context) {
+
+  Tuple *ready_tuple_t = dict_find(iter, MESSAGE_KEY_JSReady);
+
+  if(ready_tuple_t && !s_js_ready) {
+    // PebbleKit JS is ready! Safe to send messages
+    s_js_ready = true;
+    // safe to load heading
+    load_heading();
+  }
 
   bool saveSettings = false;
   Tuple *use_metric_t = dict_find(iter, MESSAGE_KEY_UseMetricSystem);

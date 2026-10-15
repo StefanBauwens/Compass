@@ -8,6 +8,10 @@ var clay = new Clay(clayConfig, null, {autoHandleEvents: false});
 
 var clayDict = null; // reference to saved settings
 var selectedLocation = 0;
+var selectedLocationName = "North";
+var selectedLocationLatitude = 0;
+var selectedLocationLongitude = 0;
+var watchID;
 
 // Listen for when the watchface is opened
 Pebble.addEventListener('ready',
@@ -33,34 +37,69 @@ Pebble.addEventListener('appmessage', function(e) {
     if ('SelectedLocation' in dict)
     {
         selectedLocation = dict.SelectedLocation;
+
         switch (selectedLocation) 
         {
             case 0:
-                console.log("Selected North.");
+                // Clear the location watch and stop receiving updates
+                navigator.geolocation.clearWatch(watchID); 
+                selectedLocationName = "North";
+                selectedLocationLatitude = 0;
+                selectedLocationLongitude = 0;
                 break;
             case 1: 
-                console.log("Selected " + clayDict[messageKeys.Location1Name] + " Lat: " + clayDict[messageKeys.Location1Lat] + " Long: " + clayDict[messageKeys.Location1Long]);
-                GetAndSendHeadingInfo(clayDict[messageKeys.Location1Lat], clayDict[messageKeys.Location1Long]);
+                selectedLocationName = clayDict[messageKeys.Location1Name];
+                selectedLocationLatitude = clayDict[messageKeys.Location1Lat];
+                selectedLocationLongitude = clayDict[messageKeys.Location1Long];
                 break;
             case 2: 
-                console.log("Selected " + clayDict[messageKeys.Location2Name] + " Lat: " + clayDict[messageKeys.Location2Lat] + " Long: " + clayDict[messageKeys.Location2Long]);
-                GetAndSendHeadingInfo(clayDict[messageKeys.Location2Lat], clayDict[messageKeys.Location2Long]);
+                selectedLocationName = clayDict[messageKeys.Location2Name];
+                selectedLocationLatitude = clayDict[messageKeys.Location2Lat];
+                selectedLocationLongitude = clayDict[messageKeys.Location2Long];
                 break;
             case 3: 
-                console.log("Selected " + clayDict[messageKeys.Location3Name] + " Lat: " + clayDict[messageKeys.Location3Lat] + " Long: " + clayDict[messageKeys.Location3Long]);
-                GetAndSendHeadingInfo(clayDict[messageKeys.Location3Lat], clayDict[messageKeys.Location3Long]);
+                selectedLocationName = clayDict[messageKeys.Location3Name];
+                selectedLocationLatitude = clayDict[messageKeys.Location3Lat];
+                selectedLocationLongitude = clayDict[messageKeys.Location3Long];
                 break;
             case 4: 
-                console.log("Selected " + clayDict[messageKeys.Location4Name] + " Lat: " + clayDict[messageKeys.Location4Lat] + " Long: " + clayDict[messageKeys.Location4Long]);
-                GetAndSendHeadingInfo(clayDict[messageKeys.Location4Lat], clayDict[messageKeys.Location4Long]);
+                selectedLocationName = clayDict[messageKeys.Location4Name];
+                selectedLocationLatitude = clayDict[messageKeys.Location4Lat];
+                selectedLocationLongitude = clayDict[messageKeys.Location4Long];
                 break;
             case 5: 
-                console.log("Selected " + clayDict[messageKeys.Location5Name] + " Lat: " + clayDict[messageKeys.Location5Lat] + " Long: " + clayDict[messageKeys.Location5Long]);
-                GetAndSendHeadingInfo(clayDict[messageKeys.Location5Lat], clayDict[messageKeys.Location5Long]);
+                selectedLocationName = clayDict[messageKeys.Location5Name];
+                selectedLocationLatitude = clayDict[messageKeys.Location5Lat];
+                selectedLocationLongitude = clayDict[messageKeys.Location5Long];
                 break;
             default:
-                console.log("Hit default");
+                selectedLocationLatitude = 0;
+                selectedLocationLongitude = 0;
+                console.log("[ALERT] Hit default. Should not happen. SelectedLocation: " + selectedLocation);
                 break;
+        }
+
+        if (selectedLocation != 0) // if not north
+        {
+            console.log("Selected " + selectedLocationName + " Lat: " + selectedLocationLatitude + " Long: " + selectedLocationLongitude);
+            // Get location updates
+            watchId = navigator.geolocation.watchPosition(
+                (position) => { // on succesful callback (will be called periodically when phone position changes)
+                    GetAndSendHeadingInfo(position.coords.latitude, position.coords.longitude, selectedLocationLatitude, selectedLocationLongitude);
+                },
+                (error) => { // on error
+                    console.log('location error (' + err.code + '): ' + err.message);
+                },
+                { // options
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 5000
+                }
+            );     
+        }
+        else // if north
+        {
+            console.log("Selected North.");
         }
     }
 });
@@ -96,6 +135,16 @@ Pebble.addEventListener('webviewclosed',
     }
 );
 
+// Callback when position changed
+function success(pos) {
+  console.log('Location changed!');
+  console.log('lat= ' + pos.coords.latitude + ' lon= ' + pos.coords.longitude);
+}
+
+function error(err) {
+  console.log('location error (' + err.code + '): ' + err.message);
+}
+
 function SendDictRetrying(dict)
 {
     Pebble.sendAppMessage(dict,
@@ -109,11 +158,11 @@ function SendDictRetrying(dict)
 }
 
 // Calculate heading relative to true north and send it to watch
-function GetAndSendHeadingInfo(lat, long) // TODO this must be requested by the watch by sending the selectedLocationindex every x time
+function GetAndSendHeadingInfo(originLat, originLong, targetLat, targetLong) // TODO this must be requested by the watch by sending the selectedLocationindex every x time OR use geolocation watchposition?
 {
     //TODO
     //1. get current position or use cached
-    //2. get heading from current position to lat, long (= degrees relative to true north)
+    //2. calculate bearing from current position to lat, long (= degrees relative to true north)
     //3. get distance in metric or imperial
     //4. send this angle and distance to watch using SendDictRetrying
 }

@@ -13,6 +13,19 @@ var selectedLocationLatitude = 0;
 var selectedLocationLongitude = 0;
 var watchID;
 
+var prevDistance = 0;
+var prevBearing = 0;
+
+function GetClayDict()
+{
+    if (clayDict == null)
+    {
+        clayDict = JSON.parse(localStorage.getItem(CLAYDICT_KEY));
+    }
+
+    return clayDict;
+}
+
 // Listen for when the watchface is opened
 Pebble.addEventListener('ready',
     function(e) {
@@ -28,21 +41,19 @@ Pebble.addEventListener('appmessage', function(e) {
     var dict = e.payload;
     console.log("Got message: " + JSON.stringify(dict));
 
-    if (clayDict == null)
-    {
-        clayDict = JSON.parse(localStorage.getItem(CLAYDICT_KEY));
-    }
+    GetClayDict(); // makes sure clayDict is populated
 
     // every time the watch wants fresh heading info it needs to re-send the selectedlocation //TODO implement on watch side
     if ('SelectedLocation' in dict)
     {
         selectedLocation = dict.SelectedLocation;
 
+        // Clear the location watch and stop receiving updates
+        navigator.geolocation.clearWatch(watchID); 
+
         switch (selectedLocation) 
         {
             case 0:
-                // Clear the location watch and stop receiving updates
-                navigator.geolocation.clearWatch(watchID); 
                 selectedLocationName = "North";
                 selectedLocationLatitude = 0;
                 selectedLocationLongitude = 0;
@@ -82,10 +93,17 @@ Pebble.addEventListener('appmessage', function(e) {
         if (selectedLocation != 0) // if not north
         {
             console.log("Selected " + selectedLocationName + " Lat: " + selectedLocationLatitude + " Long: " + selectedLocationLongitude);
-            // Get location updates
+            // Subscribe to get location updates
             watchId = navigator.geolocation.watchPosition(
                 (position) => { // on succesful callback (will be called periodically when phone position changes)
-                    GetAndSendHeadingInfo(position.coords.latitude, position.coords.longitude, selectedLocationLatitude, selectedLocationLongitude);
+                    if (selectedLocation == 0)
+                    {
+                        navigator.geolocation.clearWatch(watchID); 
+                    }
+                    else
+                    {
+                        GetAndSendHeadingInfo(position.coords.latitude, position.coords.longitude, selectedLocationLatitude, selectedLocationLongitude);
+                    }
                 },
                 (error) => { // on error
                     console.log('location error (' + err.code + '): ' + err.message);
@@ -157,14 +175,49 @@ function SendDictRetrying(dict)
     }});
 }
 
-// Calculate heading relative to true north and send it to watch
-function GetAndSendHeadingInfo(originLat, originLong, targetLat, targetLong) // TODO this must be requested by the watch by sending the selectedLocationindex every x time OR use geolocation watchposition?
+function GetDistanceAndBearing(lat1, lon1, lat2, lon2) // Based on: https://www.movable-type.co.uk/scripts/latlong.html
 {
-    //TODO
-    //1. get current position or use cached
-    //2. calculate bearing from current position to lat, long (= degrees relative to true north)
-    //3. get distance in metric or imperial
-    //4. send this angle and distance to watch using SendDictRetrying
+    // Haversine formula
+    const R = 6371e3; // earth radius in metres
+    const lat1Radians = lat1 * Math.PI / 180;
+    const lat2Radians = lat2 * Math.PI / 180;
+    const deltaLatRadians = (lat2-lat1) * Math.PI / 180;
+    const deltaLonRadians = (lon2-lon1) * Math.PI / 180;
+
+    const a = Math.sin(deltaLatRadians/2) * Math.sin(deltaLatRadians/2) + Math.cos(lat1Radians) * Math.cos(lat2Radians) * Math.sin(deltaLonRadians/2) * Math.sin(deltaLonRadians/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    const distance = R * c; // distance in meters
+
+    // bearing
+    const y = Math.sin(deltaLonRadians) * Math.cos(lat2Radians);
+    const x = Math.cos(lat1Radians)*Math.sin(lat2Radians) -
+          Math.sin(lat1Radians)*Math.cos(lat2Radians)*Math.cos(deltaLonRadians);
+    const bearingRadians = Math.atan2(y, x);
+    const bearingDegrees = (bearingRadians * 180 / Math.PI + 360) % 360;
+
+    return { distance: distance, bearing: bearingDegrees};
+}
+
+// Calculate heading relative to true north and send it to watch
+function GetAndSendHeadingInfo(originLat, originLong, targetLat, targetLong) //TODO handle converting to km/m and feet/miles on watch's end
+{
+    const distanceAndBearing = GetDistanceAndBearing(originLat, originLong, targetLat, targetLong);
+
+    if (Math.abs(distanceAndBearing.distance - prevDistance) >=1 || Math.abs(distanceAndBearing.bearing - prevBearing) > 1)
+    {
+        prevDistance = distanceAndBearing.distance;
+        prevBearing = distanceAndBearing.bearing;
+
+        console.log("Distance And Bearing: " + JSON.stringify(distanceAndBearing));
+
+        let dictToSend = {
+            'DistanceToLocation': distanceAndBearing.distance,
+            'BearingToLocation': distanceAndBearing.bearing
+        }
+
+        SendDictRetrying(dictToSend);
+    }
 }
 
 // Get difference from magnetic to true north and send it to watch

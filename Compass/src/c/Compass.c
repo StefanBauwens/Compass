@@ -21,8 +21,12 @@ typedef struct {
 
 static Window *s_window;
 static TextLayer *s_text_layer;
+static TextLayer *s_distance_text_layer;
 static Layer *s_compass_layer;
 static Layer *s_needle_layer;
+
+// distance and bearing
+static int32_t s_bearing = 0;
 
 //ticks
 static AppTimer *milli_tick_handler;
@@ -114,7 +118,6 @@ static SimpleMenuLayer *s_heading_menu_layer;
 static void heading_menu_select_callback(int index, void *context) {
   switch (index) {
     case 0:
-      //TODO make all headings actually work
       s_select_heading(0);
       break;
     case 1:
@@ -161,11 +164,17 @@ static SimpleMenuItem s_heading_menu_items[6] = {
 
 static void s_select_heading(int index) 
 {
-  bool success = send_dict_int(MESSAGE_KEY_SelectedLocation, index);
+  bool success = send_dict_int(MESSAGE_KEY_SelectedLocation, index); // send chosen value to js
   if (success && selected_heading != index) // only mark selected if message sending was valid and selected heading has changed
   {
     selected_heading = index; 
     save_heading();
+
+    if (index == 0) // if north reset distance and bearing
+    {
+      s_bearing = 0;
+      text_layer_set_text(s_distance_text_layer, "");
+    }
 
     for (int i = 0; i < CUSTOM_LOCATIONS_COUNT + 1; i++) // + 1 for north
     {
@@ -447,13 +456,17 @@ static void compass_heading_handler(CompassHeadingData heading_data) {
       break;
     case CompassStatusCalibrating:
       text_layer_set_text(s_text_layer, "C");
-      s_angle = TRIGANGLE_TO_DEG(TRIG_MAX_ANGLE - heading_data.magnetic_heading) + 180;
+      // s_angle works counter clockwise so we need to take that into account by doing 180 - (clockwise angle)
+      int32_t angle = TRIGANGLE_TO_DEG(heading_data.magnetic_heading);
+      //APP_LOG(APP_LOG_LEVEL_DEBUG, "North: %d", angle);
+      s_angle = 180 - (TRIGANGLE_TO_DEG(heading_data.magnetic_heading) + s_bearing);
       record_needle_draw_commands(); // do heavy lifting here so it doesn't happen in draw command
       layer_mark_dirty(s_needle_layer);
       break;
     case CompassStatusCalibrated:
       //text_layer_set_text(s_text_layer, "✅");
-      s_angle = TRIGANGLE_TO_DEG(TRIG_MAX_ANGLE - heading_data.magnetic_heading) + 180;
+      // s_angle works counter clockwise so we need to take that into account by doing 180 - (clockwise angle)
+      s_angle = 180 - (TRIGANGLE_TO_DEG(heading_data.magnetic_heading) + s_bearing);
       record_needle_draw_commands(); // do heavy lifting here so it doesn't happen in draw command
       layer_mark_dirty(s_needle_layer);
       break;
@@ -469,6 +482,40 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context) 
     s_js_ready = true;
     // safe to load heading
     load_heading();
+  }
+
+  // Distance 
+  Tuple *distance_to_location_t = dict_find(iter, MESSAGE_KEY_DistanceToLocation);
+  if (distance_to_location_t && selected_heading != 0) { 
+    int32_t distance = distance_to_location_t->value->int32;
+
+    static char distance_text[20];
+    if(settings.UseMetricSystem) // m/km
+    {
+      if (distance < 1000) { // meters
+        snprintf(distance_text, sizeof(distance_text), "%ld m", distance);
+      } else { // kilometers
+        snprintf(distance_text, sizeof(distance_text), "%ld.%ld km", distance/1000, (distance%1000)/100);
+      }
+    }
+    else // imperial (feet/miles)
+    {
+      distance = distance * 3.28084; // convert to feet
+      if (distance < 5280) { // feet
+        snprintf(distance_text, sizeof(distance_text), "%ld feet", distance);
+      } else { // miles
+        snprintf(distance_text, sizeof(distance_text), "%ld.%ld miles", distance/5280, (distance%5280)/528);
+      }
+    }
+
+    // print to screen
+    text_layer_set_text(s_distance_text_layer, distance_text);
+  }
+
+  // Bearing
+  Tuple *bearing_to_location_t = dict_find(iter, MESSAGE_KEY_BearingToLocation);
+  if (bearing_to_location_t && selected_heading != 0) {
+    s_bearing = bearing_to_location_t->value->int32;
   }
 
   bool saveSettings = false;
@@ -494,8 +541,6 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context) 
   if (location_3_name_t) {
     snprintf(settings.Location3Name, sizeof(settings.Location3Name), "%s", location_3_name_t->value->cstring);
     saveSettings = true;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Character: '%c'", settings.Location3Name[0]);
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "ASCII value: %d", (unsigned char)settings.Location3Name[0]);
   }
 
   Tuple *location_4_name_t = dict_find(iter, MESSAGE_KEY_Location4Name);
@@ -515,8 +560,7 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context) 
     save_settings();
   }
 
-  //TODO save the long and lat? OR consider doing some of the calculations on the js end? just pass the relative angle to north? (need to be polled of course if we're closer). Either way we need to "pol" because we need to update our location so we might as well do the heavy math on js end
- 
+  // TODO get declination
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -569,6 +613,13 @@ static void prv_window_load(Window *window) {
   text_layer_set_text_alignment(s_text_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_text_layer));
 
+  // distance text layer
+  s_distance_text_layer = text_layer_create(GRect(0, 10, PBL_DISPLAY_WIDTH, 40));
+  text_layer_set_background_color(s_distance_text_layer, GColorClear);
+  //TODO set font
+  text_layer_set_text_alignment(s_distance_text_layer, GTextAlignmentCenter);
+  layer_add_child(window_layer, text_layer_get_layer(s_distance_text_layer));
+
   // create compass background layer
   s_compass_layer = layer_create(GRect(x0_compass, y0_compass, width_compass, height_compass));
   layer_set_update_proc(s_compass_layer, compass_update_proc);
@@ -596,6 +647,7 @@ static void prv_window_unload(Window *window) {
   layer_destroy(s_compass_layer);
   layer_destroy(s_needle_layer);
   text_layer_destroy(s_text_layer);
+  text_layer_destroy(s_distance_text_layer);
   
   destroy_mini_window();
 

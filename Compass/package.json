@@ -33,7 +33,7 @@
       "JSReady",
       "UseMetricSystem",
       "DistanceToLocation",
-      "AngleToLocation",
+      "BearingToLocation",
       "SelectedLocation",
       "Location1Name",
       "Location1Lat",

@@ -35,6 +35,7 @@
       "DistanceToLocation",
       "BearingToLocation",
       "SelectedLocation",
+      "Declination",
       "Location1Name",
       "Location1Lat",
       "Location1Long",

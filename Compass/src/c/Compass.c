@@ -5,10 +5,13 @@
 #define CUSTOM_LOCATIONS_COUNT 5
 #define SETTINGS_KEY 1
 #define SELECTED_HEADING_KEY 2
+#define CALIBRATION_INFO_SHOWN_KEY 3
 
 #include <pebble.h>
 #include "libraries/sdith.h"
 #include "libraries/miniwindow.h"
+#include "libraries/resender.h"
+
 
 static void s_set_heading_items();
 static void s_select_heading(int index);
@@ -20,16 +23,22 @@ typedef struct {
 } DitherRect; // used for recording draw commands
 
 static Window *s_window;
-static TextLayer *s_text_layer;
+static TextLayer *s_calibration_text_layer;
 static TextLayer *s_distance_text_layer;
 static Layer *s_compass_layer;
 static Layer *s_needle_layer;
 
 // distance and bearing
 static int32_t s_bearing = 0;
+static int32_t s_declination = 0;
+
+// key int pairs
+static KeyIntPair selectedLocationPair = { .key = 0, .value = 0 }; // placeholder
+static KeyIntPair declinationPair = { .key = 0, .value = 1 }; // placeholder
 
 //ticks
 static AppTimer *milli_tick_handler;
+static AppTimer *retrying_dict_send;
 
 static const uint8_t s_compass[] = {
   0,0,0,0,4,4,4,4,4,4,0,0,0,0,
@@ -49,28 +58,6 @@ static const uint8_t s_compass[] = {
 /* SENDING */
 static bool s_js_ready;
 
-static bool send_dict_int(uint32_t key, int value) {
-  // Declare the dictionary's iterator
-  DictionaryIterator *out_iter;
-
-  // Prepare the outbox buffer for this message
-  AppMessageResult result = app_message_outbox_begin(&out_iter);
-  if(result == APP_MSG_OK) {
-    dict_write_int(out_iter, key, &value, sizeof(int), true);
-
-    // Send this message
-    result = app_message_outbox_send();
-    if(result != APP_MSG_OK) {
-      // Error sending the outbox
-      return false;
-    } else {
-      return true;
-    }
-  } else {
-    // The outbox cannot be used right now
-    return false;;
-  }
-}
 /* END SENDING*/
 
 /* CONFIG */
@@ -109,6 +96,23 @@ static void load_heading() { // gets called only when js_ready is true, since th
     heading_menu_select_callback(heading, NULL); // indirectly sets selected_heading if valid
   }
 }
+
+static bool s_calibration_info_shown = false;
+
+static void set_calibration_info_shown(bool shown) {
+  s_calibration_info_shown = shown;
+  persist_write_int(CALIBRATION_INFO_SHOWN_KEY, shown ? 1 : 0);
+}
+
+static bool get_calibration_info_shown() {
+  if (persist_exists(CALIBRATION_INFO_SHOWN_KEY))
+  {
+    s_calibration_info_shown = (persist_read_int(CALIBRATION_INFO_SHOWN_KEY) == 1);
+    return s_calibration_info_shown;
+  }
+  return false;
+}
+
 /* END CONFIG */
 
 /* HEADING MENU */
@@ -164,8 +168,9 @@ static SimpleMenuItem s_heading_menu_items[6] = {
 
 static void s_select_heading(int index) 
 {
-  bool success = send_dict_int(MESSAGE_KEY_SelectedLocation, index); // send chosen value to js
-  if (success && selected_heading != index) // only mark selected if message sending was valid and selected heading has changed
+  selectedLocationPair = (KeyIntPair){ .key = MESSAGE_KEY_SelectedLocation, .value = index };
+  send_retrying_int(&selectedLocationPair);
+  if (selected_heading != index) 
   {
     selected_heading = index; 
     save_heading();
@@ -449,24 +454,23 @@ static void compass_heading_handler(CompassHeadingData heading_data) {
   // Is the compass calibrated?
   switch(heading_data.compass_status) {
     case CompassStatusDataInvalid:
-      text_layer_set_text(s_text_layer, "❎");
+      text_layer_set_text(s_calibration_text_layer, "❎");
       break;
     case CompassStatusUnavailable:
-      text_layer_set_text(s_text_layer, "❗");
+      text_layer_set_text(s_calibration_text_layer, "❗");
       break;
     case CompassStatusCalibrating:
-      text_layer_set_text(s_text_layer, "C");
+      text_layer_set_text(s_calibration_text_layer, "C");
       // s_angle works counter clockwise so we need to take that into account by doing 180 - (clockwise angle)
-      int32_t angle = TRIGANGLE_TO_DEG(heading_data.magnetic_heading);
       //APP_LOG(APP_LOG_LEVEL_DEBUG, "North: %d", angle);
-      s_angle = 180 - (TRIGANGLE_TO_DEG(heading_data.magnetic_heading) + s_bearing);
+      s_angle = 180 - (TRIGANGLE_TO_DEG(heading_data.magnetic_heading) + s_bearing + s_declination);
       record_needle_draw_commands(); // do heavy lifting here so it doesn't happen in draw command
       layer_mark_dirty(s_needle_layer);
       break;
     case CompassStatusCalibrated:
       //text_layer_set_text(s_text_layer, "✅");
       // s_angle works counter clockwise so we need to take that into account by doing 180 - (clockwise angle)
-      s_angle = 180 - (TRIGANGLE_TO_DEG(heading_data.magnetic_heading) + s_bearing);
+      s_angle = 180 - (TRIGANGLE_TO_DEG(heading_data.magnetic_heading) + s_bearing + s_declination);
       record_needle_draw_commands(); // do heavy lifting here so it doesn't happen in draw command
       layer_mark_dirty(s_needle_layer);
       break;
@@ -482,6 +486,16 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context) 
     s_js_ready = true;
     // safe to load heading
     load_heading();
+    // request declination
+    declinationPair.key = MESSAGE_KEY_Declination; // needs to be set here since message key isn't constant
+    send_retrying_int(&declinationPair);
+  }
+
+  Tuple *declination_tuple_t = dict_find(iter, MESSAGE_KEY_Declination);
+  if (declination_tuple_t)
+  {
+    s_declination = declination_tuple_t->value->int32;
+    APP_LOG(APP_LOG_LEVEL_DEBUG,"Declination received %ld", s_declination);
   }
 
   // Distance 
@@ -502,9 +516,9 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context) 
     {
       distance = distance * 3.28084; // convert to feet
       if (distance < 5280) { // feet
-        snprintf(distance_text, sizeof(distance_text), "%ld feet", distance);
+        snprintf(distance_text, sizeof(distance_text), "%ld ft", distance);
       } else { // miles
-        snprintf(distance_text, sizeof(distance_text), "%ld.%ld miles", distance/5280, (distance%5280)/528);
+        snprintf(distance_text, sizeof(distance_text), "%ld.%ld mi", distance/5280, (distance%5280)/528);
       }
     }
 
@@ -559,8 +573,6 @@ static void prv_inbox_received_handler(DictionaryIterator *iter, void *context) 
   {
     save_settings();
   }
-
-  // TODO get declination
 }
 
 static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -608,15 +620,15 @@ static void prv_window_load(Window *window) {
   uint8_t y0_compass = (PBL_DISPLAY_HEIGHT - height_compass) / 2;
 
   // text layer
-  s_text_layer = text_layer_create(GRect(0, 0, 15, 15));
+  s_calibration_text_layer = text_layer_create(GRect(0, PBL_DISPLAY_HEIGHT - 15, 15, 15));
   //text_layer_set_text(s_text_layer, "Press a button");
-  text_layer_set_text_alignment(s_text_layer, GTextAlignmentCenter);
-  layer_add_child(window_layer, text_layer_get_layer(s_text_layer));
+  text_layer_set_text_alignment(s_calibration_text_layer, GTextAlignmentCenter);
+  layer_add_child(window_layer, text_layer_get_layer(s_calibration_text_layer));
 
   // distance text layer
-  s_distance_text_layer = text_layer_create(GRect(0, 10, PBL_DISPLAY_WIDTH, 40));
+  s_distance_text_layer = text_layer_create(GRect(0, 0, PBL_DISPLAY_WIDTH, 40));
   text_layer_set_background_color(s_distance_text_layer, GColorClear);
-  //TODO set font
+  text_layer_set_font(s_distance_text_layer, fonts_get_system_font(FONT_KEY_LECO_20_BOLD_NUMBERS));
   text_layer_set_text_alignment(s_distance_text_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_distance_text_layer));
 
@@ -636,6 +648,14 @@ static void prv_window_load(Window *window) {
   // mini window
   DitherTemplate background = DITHER_TEMPLATE(DITHER_BLANK, GColorWhite, GColorWhite);
   create_mini_window(window_layer, GRect(10, 10, 124, 134), "Calibration Info", "❎ Not calibrated\n C Busy Calibrating\n\nCalibrate watch by moving in an 8 figure till no symbol is visible.", background);
+  if (get_calibration_info_shown())
+  {
+    hide_mini_window();
+  }
+  else
+  {
+    set_calibration_info_shown(true);
+  }
 
   // Subscribe to compass heading updates
   compass_service_subscribe(compass_heading_handler); 
@@ -646,7 +666,7 @@ static void prv_window_load(Window *window) {
 static void prv_window_unload(Window *window) {
   layer_destroy(s_compass_layer);
   layer_destroy(s_needle_layer);
-  text_layer_destroy(s_text_layer);
+  text_layer_destroy(s_calibration_text_layer);
   text_layer_destroy(s_distance_text_layer);
   
   destroy_mini_window();
@@ -679,6 +699,7 @@ static void prv_init(void) {
   });
 
   load_settings();
+
 
   // Open AppMessage connection
   app_message_register_inbox_received(prv_inbox_received_handler);

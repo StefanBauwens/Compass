@@ -16,6 +16,45 @@ var watchID;
 var prevDistance = 0;
 var prevBearing = 0;
 
+var xhrRequest = function (url, type, data, callback, errorCallback, timeout = 10000) {
+  var xhr = new XMLHttpRequest();
+
+  xhr.timeout = timeout; // in milliseconds (10s default)
+
+  xhr.onload = function () {
+    if (xhr.status >= 200 && xhr.status < 300) {
+      callback(xhr.responseText);
+    } else {
+      if (errorCallback) {
+        errorCallback(xhr.status, xhr.responseText);
+      }
+    }
+  };
+
+  xhr.onerror = function () {
+    if (errorCallback) {
+      errorCallback('network_error', null);
+    }
+  };
+
+  xhr.ontimeout = function () {
+    if (errorCallback) {
+      errorCallback('timeout', null);
+    }
+  };
+
+  xhr.open(type, url);
+
+  // Set JSON header if sending data
+  if (data) {
+    xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
+    xhr.send(JSON.stringify(data));
+  } else {
+    xhr.send();
+  }
+};
+
+
 function GetClayDict()
 {
     if (clayDict == null)
@@ -43,7 +82,6 @@ Pebble.addEventListener('appmessage', function(e) {
 
     GetClayDict(); // makes sure clayDict is populated
 
-    // every time the watch wants fresh heading info it needs to re-send the selectedlocation //TODO implement on watch side
     if ('SelectedLocation' in dict)
     {
         selectedLocation = dict.SelectedLocation;
@@ -119,6 +157,11 @@ Pebble.addEventListener('appmessage', function(e) {
         {
             console.log("Selected North.");
         }
+    }
+
+    if ('Declination' in dict) // watch is requesting declination
+    {
+        GetAndSendMagneticDeclination();
     }
 });
 
@@ -200,7 +243,7 @@ function GetDistanceAndBearing(lat1, lon1, lat2, lon2) // Based on: https://www.
 }
 
 // Calculate heading relative to true north and send it to watch
-function GetAndSendHeadingInfo(originLat, originLong, targetLat, targetLong) //TODO handle converting to km/m and feet/miles on watch's end
+function GetAndSendHeadingInfo(originLat, originLong, targetLat, targetLong)
 {
     const distanceAndBearing = GetDistanceAndBearing(originLat, originLong, targetLat, targetLong);
 
@@ -221,7 +264,38 @@ function GetAndSendHeadingInfo(originLat, originLong, targetLat, targetLong) //T
 }
 
 // Get difference from magnetic to true north and send it to watch
-function GetAndSendMagneticDeclination() //TODO this must be requested by the watch, perhaps once on app start (if it fails, just ignore it or fall back to persistant value on watch)
+function GetAndSendMagneticDeclination() 
 {
-    //TODO https://randomapi.dev/api/magnetic-declination?lat=50.85&lng=4.35
+    console.log("Watch requesting declination...");
+    // get current position
+    navigator.geolocation.getCurrentPosition((position) => 
+        { // on succesful callback 
+            const url = 'https://randomapi.dev/api/magnetic-declination?lat=' + position.coords.latitude + '&lng=' + position.coords.longitude;
+            
+            // try to get declination
+            xhrRequest(url, 'GET', null, 
+                (responseText) => { // callback on success
+                    const responseObj = JSON.parse(responseText);
+                    console.log("Declination deg: "  + responseObj.data.declinationDegrees);
+
+                    // send to watch
+                    let dictToSend = {
+                        'Declination' : responseObj.data.declinationDegrees
+                    }
+                    SendDictRetrying(dictToSend);
+                }, 
+                (error, responseText) => { // callback on error
+                    console.log("Error trying to fetch magnetic declination: " + error + " : " + responseText);
+                }
+            );
+        },
+        (error) => { // on error
+            console.log('Location error when trying to get magnetic declination (' + err.code + '): ' + err.message);
+        },
+        { // options
+            enableHighAccuracy: true,
+            maximumAge: 10000,
+            timeout: 10000
+        }
+    );
 }

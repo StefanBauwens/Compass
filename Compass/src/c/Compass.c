@@ -7,6 +7,16 @@
 #define SELECTED_HEADING_KEY 2
 #define CALIBRATION_INFO_SHOWN_KEY 3
 
+#if PBL_PLATFORM_EMERY || PBL_PLATFORM_GABBRO
+  #define POPUP_WIDTH 148
+  #define POPUP_HEIGHT 164
+#else
+  #define POPUP_WIDTH 124
+  #define POPUP_HEIGHT 134
+#endif
+#define POPUP_X  (PBL_DISPLAY_WIDTH - POPUP_WIDTH) / 2
+#define POPUP_Y (PBL_DISPLAY_HEIGHT - POPUP_HEIGHT) / 2
+
 #include <pebble.h>
 #include "libraries/sdith.h"
 #include "libraries/miniwindow.h"
@@ -647,7 +657,7 @@ static void prv_window_load(Window *window) {
 
   // mini window
   DitherTemplate background = DITHER_TEMPLATE(DITHER_BLANK, GColorWhite, GColorWhite);
-  create_mini_window(window_layer, GRect(10, 10, 124, 134), "Calibration Info", " X Not calibrated\n C Busy Calibrating\n\nCalibrate watch by moving in an 8 figure till no symbol is visible.", background);
+  create_mini_window(window_layer, GRect(POPUP_X, POPUP_Y, POPUP_WIDTH, POPUP_HEIGHT), "Calibration Info", " X Not calibrated\n C Busy Calibrating\n\nCalibrate watch by moving in an 8 figure till no symbol is visible.", background);
   if (get_calibration_info_shown())
   {
     hide_mini_window();

@@ -59,6 +59,26 @@
           "type": "bitmap",
           "name": "APP_ICON",
           "file": "images/app_icon.png"
+        },
+        {
+          "type": "font",
+          "name": "LECO_20",
+          "file": "fonts/leco.otf",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "emery",
+            "flint",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "LECO_14",
+          "file": "fonts/leco.otf",
+          "targetPlatforms": [
+            "chalk"
+          ]
         }
       ]
     }

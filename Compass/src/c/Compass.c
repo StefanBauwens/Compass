@@ -1,19 +1,32 @@
 #define COMPASS_WIDTH 14
 #define COMPASS_HEIGHT 12
 #define STEP_DELAY 150 //ms
-#define PIXEL_THICKNESS 10
 #define CUSTOM_LOCATIONS_COUNT 5
 #define SETTINGS_KEY 1
 #define SELECTED_HEADING_KEY 2
 #define CALIBRATION_INFO_SHOWN_KEY 3
 
-#if PBL_PLATFORM_EMERY || PBL_PLATFORM_GABBRO
+// common
+#if (PBL_PLATFORM_EMERY || PBL_PLATFORM_GABBRO)
   #define POPUP_WIDTH 148
   #define POPUP_HEIGHT 164
+  #define PIXEL_THICKNESS 14
 #else
   #define POPUP_WIDTH 124
   #define POPUP_HEIGHT 134
+  #define PIXEL_THICKNESS 10
 #endif
+
+#if PBL_PLATFORM_EMERY
+  #define DISTANCE_TEXT_Y 2
+#elif PBL_PLATFORM_GABBRO
+  #define DISTANCE_TEXT_Y 15
+#elif PBL_PLATFORM_CHALK
+  #define DISTANCE_TEXT_Y 10
+#else 
+  #define DISTANCE_TEXT_Y 0
+#endif
+
 #define POPUP_X  (PBL_DISPLAY_WIDTH - POPUP_WIDTH) / 2
 #define POPUP_Y (PBL_DISPLAY_HEIGHT - POPUP_HEIGHT) / 2
 
@@ -37,6 +50,7 @@ static TextLayer *s_calibration_text_layer;
 static TextLayer *s_distance_text_layer;
 static Layer *s_compass_layer;
 static Layer *s_needle_layer;
+static GFont s_leco_font;
 
 // distance and bearing
 static int32_t s_bearing = 0;
@@ -472,13 +486,12 @@ static void compass_heading_handler(CompassHeadingData heading_data) {
     case CompassStatusCalibrating:
       text_layer_set_text(s_calibration_text_layer, "C");
       // s_angle works counter clockwise so we need to take that into account by doing 180 - (clockwise angle)
-      //APP_LOG(APP_LOG_LEVEL_DEBUG, "North: %d", angle);
       s_angle = 180 - (TRIGANGLE_TO_DEG(heading_data.magnetic_heading) + s_bearing + s_declination);
       record_needle_draw_commands(); // do heavy lifting here so it doesn't happen in draw command
       layer_mark_dirty(s_needle_layer);
       break;
     case CompassStatusCalibrated:
-      //text_layer_set_text(s_text_layer, "✅");
+      text_layer_set_text(s_calibration_text_layer, "\n"); // hide C
       // s_angle works counter clockwise so we need to take that into account by doing 180 - (clockwise angle)
       s_angle = 180 - (TRIGANGLE_TO_DEG(heading_data.magnetic_heading) + s_bearing + s_declination);
       record_needle_draw_commands(); // do heavy lifting here so it doesn't happen in draw command
@@ -629,16 +642,28 @@ static void prv_window_load(Window *window) {
   uint8_t x0_compass = (PBL_DISPLAY_WIDTH - width_compass) / 2;
   uint8_t y0_compass = (PBL_DISPLAY_HEIGHT - height_compass) / 2;
 
+  // load font
+  #if PBL_PLATFORM_CHALK
+    s_leco_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_LECO_14));
+  #else
+    s_leco_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_LECO_20));
+  #endif
+
   // text layer
-  s_calibration_text_layer = text_layer_create(GRect(0, PBL_DISPLAY_HEIGHT - 15, 15, 15));
+  #if PBL_ROUND
+    s_calibration_text_layer = text_layer_create(GRect((PBL_DISPLAY_WIDTH - 20)/2, PBL_DISPLAY_HEIGHT - 20, 20, 20));
+  #else
+    s_calibration_text_layer = text_layer_create(GRect(0, PBL_DISPLAY_HEIGHT - 20, 20, 20));
+  #endif
   //text_layer_set_text(s_text_layer, "Press a button");
   text_layer_set_text_alignment(s_calibration_text_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_calibration_text_layer));
 
   // distance text layer
-  s_distance_text_layer = text_layer_create(GRect(0, 0, PBL_DISPLAY_WIDTH, 40));
+  s_distance_text_layer = text_layer_create(GRect(0, DISTANCE_TEXT_Y, PBL_DISPLAY_WIDTH, 40));
   text_layer_set_background_color(s_distance_text_layer, GColorClear);
-  text_layer_set_font(s_distance_text_layer, fonts_get_system_font(FONT_KEY_LECO_20_BOLD_NUMBERS));
+  text_layer_set_font(s_distance_text_layer, s_leco_font);
+  //text_layer_set_font(s_distance_text_layer, fonts_get_system_font(FONT_KEY_LECO_20_BOLD_NUMBERS));
   text_layer_set_text_alignment(s_distance_text_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_distance_text_layer));
 
@@ -678,6 +703,7 @@ static void prv_window_unload(Window *window) {
   layer_destroy(s_needle_layer);
   text_layer_destroy(s_calibration_text_layer);
   text_layer_destroy(s_distance_text_layer);
+  fonts_unload_custom_font(s_leco_font);
   
   destroy_mini_window();
 

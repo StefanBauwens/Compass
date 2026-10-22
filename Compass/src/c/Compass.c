@@ -454,10 +454,10 @@ static void compass_heading_handler(CompassHeadingData heading_data) {
   // Is the compass calibrated?
   switch(heading_data.compass_status) {
     case CompassStatusDataInvalid:
-      text_layer_set_text(s_calibration_text_layer, "❎");
+      text_layer_set_text(s_calibration_text_layer, "X");
       break;
     case CompassStatusUnavailable:
-      text_layer_set_text(s_calibration_text_layer, "❗");
+      text_layer_set_text(s_calibration_text_layer, "!");
       break;
     case CompassStatusCalibrating:
       text_layer_set_text(s_calibration_text_layer, "C");
@@ -647,7 +647,7 @@ static void prv_window_load(Window *window) {
 
   // mini window
   DitherTemplate background = DITHER_TEMPLATE(DITHER_BLANK, GColorWhite, GColorWhite);
-  create_mini_window(window_layer, GRect(10, 10, 124, 134), "Calibration Info", "❎ Not calibrated\n C Busy Calibrating\n\nCalibrate watch by moving in an 8 figure till no symbol is visible.", background);
+  create_mini_window(window_layer, GRect(10, 10, 124, 134), "Calibration Info", " X Not calibrated\n C Busy Calibrating\n\nCalibrate watch by moving in an 8 figure till no symbol is visible.", background);
   if (get_calibration_info_shown())
   {
     hide_mini_window();

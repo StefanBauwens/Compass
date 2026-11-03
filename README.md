@@ -5,9 +5,9 @@ A Minecraft style compass for Pebble watches.
 
 ![watchapp screenshot basalt](Screenshots/basalt.png)
 ![watchapp screenshot monochrome](Screenshots/bw.png)
+![watchapp screenshot emery](Screenshots/emery.png)
 
 ![wwatchapp screenshot chalk](Screenshots/chalk.png)
-![watchapp screenshot emery](Screenshots/emery.png)
 ![watchapp screenshot gabbro](Screenshots/gabbro.png)
 
 ## Features & Updates:

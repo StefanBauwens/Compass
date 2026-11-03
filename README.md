@@ -1,7 +1,7 @@
 # Compass
 A Minecraft style compass for Pebble watches.
 
-[Pebble Store Link](https://apps.repebble.com/TODO)
+[Pebble Store Link](https://apps.repebble.com/2e69de9b59d54246aa379f36)
 
 ![watchapp screenshot basalt](Screenshots/basalt.png)
 ![watchapp screenshot monochrome](Screenshots/bw.png)

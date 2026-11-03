@@ -1,5 +1,5 @@
 # Compass
-A Minecraft style compass for the Pebble watches. 
+A Minecraft style compass for Pebble watches.
 
 [Pebble Store Link](https://apps.repebble.com/TODO)
 
@@ -16,6 +16,7 @@ v1.0.:
 - Option to set up to 5 custom locations
 - Distance to custom locations
 - Imperial/Metric toggle
+- Custom dither library for getting more out of the screen
 - Support for all Pebbles (except original Pebble 2 which has no built-in compass)
 
 ## How to use
